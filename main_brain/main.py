@@ -60,13 +60,25 @@ def main():
     port = None if args.no_arduino else args.port
     robotBrain.start(serial_port=port) # Starting the robot brain
 
-    log.info("Logs check")
+    if args.register:
+        name = args.register.strip()
+        log.info(f"Face registration mode for '{name}")
+        log.info("Look at the camera. Press ENTER to campure.")
+        input()
+
+        # Face adding logic
+        
+        robotBrain.stop()
+        sys.exit(0)
 
     try:
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
         print("\n\nShutting Down...\n\n")
+    finally:
+        robotBrain.stop()
+        print("Robot Shutting Down...")
     
 
 if __name__ == "__main__":

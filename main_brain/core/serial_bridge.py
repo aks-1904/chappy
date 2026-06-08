@@ -38,3 +38,7 @@ class SerialBridge:
             self._connected = False
             
             return False
+        
+    def disconnect(self):
+        self._connected = False
+        log.info("[Serial] Disconnected")

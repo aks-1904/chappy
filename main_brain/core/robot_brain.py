@@ -37,3 +37,8 @@ class RobotBrain:
         self._running = True
 
         log.info("Robot Brain Running")
+
+    def stop(self):
+        self._running = False
+        self.serial.disconnect()
+        log.info("Robot Brain Stopped")
