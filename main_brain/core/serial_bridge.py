@@ -1,6 +1,40 @@
+import serial
 import serial.tools.list_ports
+import time
+import logging
+from typing import Optional
+
+from config.settings import SERIAL
+
+log = logging.getLogger(__name__)
 
 class SerialBridge:
+
+    def __init__(self):
+        self._port: Optional[serial.Serial] = None
+        self._connected: bool = False
+
     @staticmethod
     def list_ports() -> list[str]:
         return [p.device for p in serial.tools.list_ports.comports()]
+    
+    def connect(self, port: Optional[str] = None) -> bool:
+        port = port or SERIAL["port"]
+        try:
+            self._port = serial.Serial(
+                port=port,
+                baudrate=SERIAL["baud"],
+                timeout=SERIAL["timeout"],
+            )
+            time.sleep(2) # Arduino resets on serial open
+            self._connected = True
+            log.info(f"[Serial] Connected on {port}")
+
+            # Call function to start reading serial data (Implement later)
+
+            return True
+        except serial.SerialException as e:
+            log.error(f"[Serial] Connect failed on {port}: {e}")
+            self._connected = False
+            
+            return False

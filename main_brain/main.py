@@ -6,6 +6,7 @@ import argparse
 
 from utils.logger import setup_logging
 from core.serial_bridge import SerialBridge
+from core.robot_brain import RobotBrain
 
 # Allow imports from main_brain/ directory
 sys.path.insert(0, str(Path(__file__).parent))
@@ -54,8 +55,10 @@ def main():
             print(f"\t{p}")
         sys.exit(0)
 
+    robotBrain = RobotBrain()
+
     port = None if args.no_arduino else args.port
-    print(f"PORT ${port}")
+    robotBrain.start(serial_port=port) # Starting the robot brain
 
     log.info("Logs check")
 
