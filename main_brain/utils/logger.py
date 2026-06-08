@@ -6,7 +6,7 @@ import datetime
 from config.settings import LOG
 
 def setup_logging():
-    level = getattr(logging, LOG["level".upper(), logging.INFO])
+    level = getattr(logging, LOG["level"].upper(), logging.INFO)
     
     handlers = [logging.StreamHandler(sys.stdout)]
 
