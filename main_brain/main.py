@@ -70,6 +70,7 @@ def main():
         if frame is not None:
             res = robotBrain.vision.register_face(name, frame)
             if res:
+                robotBrain.memory.upsert_user(name)
                 print(f"Face registered for '{name}'")
             else:
                 print(f"No face detected. Try again")
@@ -93,7 +94,6 @@ def main():
     finally:
         robotBrain.stop()
         print("Stopping the system...")
-    
 
 if __name__ == "__main__":
     main()
