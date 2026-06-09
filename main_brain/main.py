@@ -60,13 +60,19 @@ def main():
     port = None if args.no_arduino else args.port
     robotBrain.start(serial_port=port) # Starting the robot brain
 
-    log.info("Logs check")
+    print("\n" + "-" * 50)
+    print("Chappy Robot - Running")
+    print("Press Ctrl + C to stop")
+    print("\n" + "-" * 50)
 
     try:
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
         print("\n\nShutting Down...\n\n")
+    finally:
+        robotBrain.stop()
+        print("Stopping the system...")
     
 
 if __name__ == "__main__":
