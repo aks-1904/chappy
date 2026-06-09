@@ -60,6 +60,17 @@ def main():
     port = None if args.no_arduino else args.port
     robotBrain.start(serial_port=port) # Starting the robot brain
 
+    if args.register:
+        name = args.register.strip()
+        log.info(f"Face registration mode for '{name}")
+        log.info("Look at the camera. Press ENTER to campure.")
+        input()
+
+        # Face adding logic
+        
+        robotBrain.stop()
+        sys.exit(0)
+        
     print("\n" + "-" * 50)
     print("Chappy Robot - Running")
     print("Press Ctrl + C to stop")

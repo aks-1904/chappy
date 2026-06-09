@@ -4,6 +4,7 @@ import logging
 
 from core.serial_bridge import SerialBridge
 from modules.vision import VisionModule
+from modules.speech import SpeechModule
 
 log = logging.getLogger(__name__)
 
@@ -19,6 +20,7 @@ class RobotBrain:
     def __init__(self):
         self.serial = SerialBridge()
         self.vision = VisionModule()
+        self.speech = SpeechModule()
 
         self._running: bool = False
         self._state: RobotState = RobotState.IDLE
@@ -37,6 +39,7 @@ class RobotBrain:
             log.warning("[Robot Brain] Arduino not connected")
 
         self.vision.start()
+        self.speech.start()
 
         self._running = True
 
@@ -45,5 +48,6 @@ class RobotBrain:
     def stop(self):
         self._running = False
         self.vision.stop()
+        self.speech.stop()
         
         log.info("[Robot Brain Stopped]")

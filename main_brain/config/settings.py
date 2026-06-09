@@ -27,3 +27,11 @@ VISION = {
     "unknown_label": "Stranger",
     "min_face_confidence": 0.70
 }
+
+AUDIO = {
+    # Speech to text(whisper)
+    "whisper_model": "base", # tiny | base | small | medium | large
+    "tts_voice_index": 0, # 0 = first available voice
+    "tts_rate": 165, # Words per minute
+    "ts_volume": 0.95,
+}
