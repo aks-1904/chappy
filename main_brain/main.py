@@ -66,11 +66,20 @@ def main():
         log.info("Look at the camera. Press ENTER to campure.")
         input()
 
-        # Face adding logic
+        frame = robotBrain.vision.get_frame()
+        if frame is not None:
+            res = robotBrain.vision.register_face(name, frame)
+            if res:
+                print(f"Face registered for '{name}'")
+            else:
+                print(f"No face detected. Try again")
+        
+        else:
+            print("Camera not available")
         
         robotBrain.stop()
         sys.exit(0)
-        
+
     print("\n" + "-" * 50)
     print("Chappy Robot - Running")
     print("Press Ctrl + C to stop")

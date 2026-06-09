@@ -5,6 +5,9 @@ import threading
 import time
 import numpy as np
 from dataclasses import dataclass, field
+import os
+from deepface import DeepFace
+import mediapipe
 
 from config.settings import VISION
 
@@ -30,6 +33,9 @@ class VisionModule:
         self._lock: threading.Lock = threading.Lock()
         self.latest_frame:      Optional[np.ndarray] = None
         self.latest_perception: Perception = Perception()
+
+        self._load_known_faces()
+        self._known_faces: dict[str, list] = {}
 
     def start(self) -> bool:
         idx = VISION["camera_index"]
@@ -62,6 +68,59 @@ class VisionModule:
             self._cap.release()
 
         log.info("[Vision] camera stopped")
+
+    # Face Recognition
+    def _load_known_faces(self):
+        db_path = VISION["face_db_path"]
+        if not os.path.isdir(db_path):
+            os.makedirs(db_path, exist_ok=True)
+            return
+        
+        for name_dir in os.listdir(db_path):
+            dir_path = os.path.join(db_path, name_dir)
+            if not os.path.isdir(dir_path):
+                continue
+
+            embeddings = []
+            for img_file in os.listdir(dir_path):
+                if not img_file.lower().endswith((".jpg", ".jpeg", ".png")):
+                    continue
+
+                img_path = os.path.join(dir_path, img_file)
+                try:
+                    emb = DeepFace.represent(
+                        img_path=img_path,
+                        model_name="Facenet",
+                        enforce_detection=False,
+                    )
+                    embeddings.append(emb[0]["embedding"])
+                except Exception as e:
+                    log.debug(f"[Vision] Embedding failed for {img_path}: {e}")
+            if embeddings:
+                self._known_faces[name_dir] = embeddings
+                log.info(f"[Vision] Loaded {len(embeddings)} faces for '{name_dir}'")
+
+    def register_face(self, name: str, frame: np.ndarray) -> bool:
+        perception = self.latest_perception
+        if not perception.faces:
+            log.warning("[Vision] No face detected to register")
+            return False
+        
+        bbox = perception.faces[0]["bbox"]
+        x, y, fw, fh = bbox
+        crop = frame[y: y + fh, x: x + fw]
+        save_dir = os.path.join(VISION["face_db_path"], name)
+        os.makedirs(save_dir, exist_ok=True)
+
+        fname = os.path.join(save_dir, f"{int(time.time())}.jpg")
+        cv2.imwrite(fname, crop)
+        log.info(f"[Vision] Registerd face for '{name}' -> '{fname}'")
+
+        return True
+
+    def get_frame(self) -> Optional[np.ndarray]:
+        with self._lock:
+            return self.latest_frame.copy() if self.latest_frame is not None else None
 
     def _capture_loop(self):
         while self._running:
