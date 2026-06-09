@@ -4,6 +4,9 @@ import time
 import logging
 from typing import Optional
 import queue
+from typing import Callable
+import json
+import threading
 
 from config.settings import SERIAL
 
@@ -15,6 +18,8 @@ class SerialBridge:
         self._port: Optional[serial.Serial] = None
         self._connected: bool = False
         self._event_queue: queue.Queue  = queue.Queue(maxsize=64)
+        self._gesture_callbacks: dict[str, Callable] = {}
+        self._lock: threading.Lock = threading.Lock()
 
     @staticmethod
     def list_ports() -> list[str]:
@@ -47,6 +52,32 @@ class SerialBridge:
         self._connected = False
         
         log.info("[Serial] Disconnected")
+    
+    def send(self, cmd: str, payload: Optional[dict] = None) -> bool:
+        if not self._connected:
+            log.warning("[Serial] Not connected - command dropped")
+            return False
+        
+        msg = {"cmd": cmd}
+        if payload:
+            msg.update(payload)
+
+        line = json.dumps(msg) + "\n"
+        with self._lock:
+            try:
+                self._port.write(line.encode("utf-8"))
+                return True
+            except serial.SerialException as e:
+                log.error(f"[Serial] Write failed: {e}")
+                self._connected = False
+                return False
+            
+
+    def gesture(self, name: str, on_done: Optional[Callable] = None):
+        cmd = f"gesture_{name}"
+        if on_done:
+            self._gesture_callbacks[name] = on_done
+        self.send(cmd)
 
     def poll_event(self) -> Optional[dict]:
         try:

@@ -127,13 +127,25 @@ class RobotBrain:
         return "Guest"
 
     def _offer_handshake(self):
-        pass
+        if self.state not in (RobotState.IDLE, RobotState.GREETING):
+            return
+        
+        self._set_state(RobotState.GESTURE_ONLY)
+        self._speak("Want to shake hands?", "neutral")
+        self.serial.gesture("handshake")
+        self._set_state(RobotState.IDLE)
 
     def _greet_by_pir(self):
-        pass
+        time.sleep(1)
+        perception = self.vision.get_perception()
+        name = self._get_active_user_from_perception(perception)
+        self._greet_user(name, perception.dominant_emotion)
 
     def _do_handshake_response(self):
-        pass
+        self._set_state(RobotState.GESTURE_ONLY)
+        self.serial.gesture("handshake")
+        self._speak("Nice to meet you!", "happy")
+        self._set_state(RobotState.IDLE)
 
     def _handle_serial_events(self):
         while True:
@@ -186,7 +198,7 @@ class RobotBrain:
 
     def _speak(self, text: str, emotion: str = "neutral"):
         log.info(f"[Robot Brain] Speaking ({emotion}): {text!r}")
-        # Robot speaks about reminder (To be implemented later)
+        self.speech.speak(text, emotion=emotion, blocking=True)
     
     def _check_reminders(self):
         reminders = self.memory.get_due_reminders()
