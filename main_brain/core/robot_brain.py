@@ -6,6 +6,7 @@ import threading
 from core.serial_bridge import SerialBridge
 from modules.vision import VisionModule
 from modules.speech import SpeechModule
+from modules.memory import MemoryModule
 
 log = logging.getLogger(__name__)
 
@@ -22,6 +23,7 @@ class RobotBrain:
         self.serial = SerialBridge()
         self.vision = VisionModule()
         self.speech = SpeechModule()
+        self.memory = MemoryModule()
 
         self._running: bool = False
         self._state: RobotState = RobotState.IDLE
@@ -72,4 +74,6 @@ class RobotBrain:
         log.info("[Robot Brain Stopped]")
 
     def _main_loop(self):
-        pass # To be implemented later
+        self.speech.start_listening_thread() # Start listening thread - pushes to SpeechModule queue
+
+        # Handle task of Robot (To be implemented later)

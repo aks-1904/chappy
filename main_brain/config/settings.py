@@ -35,3 +35,7 @@ AUDIO = {
     "tts_rate": 165, # Words per minute
     "ts_volume": 0.95,
 }
+
+MEMORY = {
+    "db_path": str(BASE_DIR / "data" / "memory.db"),
+}
