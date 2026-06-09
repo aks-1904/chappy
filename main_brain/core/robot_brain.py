@@ -1,6 +1,7 @@
 from enum import Enum, auto
 from typing import Optional
 import logging
+import threading
 
 from core.serial_bridge import SerialBridge
 from modules.vision import VisionModule
@@ -24,6 +25,19 @@ class RobotBrain:
 
         self._running: bool = False
         self._state: RobotState = RobotState.IDLE
+        self._state_lock: threading.Lock = threading.Lock()
+
+    # State helpers
+    def _set_state(self, new_state: RobotState):
+        with self._state_lock:
+            old = self._state
+            self._state = new_state
+            log.debug(f"[Robot Brain] State: {old.name} -> {new_state.name}")
+
+    @property
+    def state(self) -> RobotState:
+        with self._state_lock:
+            return self._state
 
     def start(self, serial_port: Optional[str] = None):
         log.info("[Robot Brain] Initializing")
@@ -42,6 +56,10 @@ class RobotBrain:
         self.speech.start()
 
         self._running = True
+        self._main_thread = threading.Thread(
+            target=self._main_loop, name="BrainLoop", daemon=True
+        )
+        self._main_thread.start()
 
         log.info("[Robot Brain] Running")
 
@@ -49,5 +67,9 @@ class RobotBrain:
         self._running = False
         self.vision.stop()
         self.speech.stop()
+        self.serial.disconnect()
         
         log.info("[Robot Brain Stopped]")
+
+    def _main_loop(self):
+        pass # To be implemented later
