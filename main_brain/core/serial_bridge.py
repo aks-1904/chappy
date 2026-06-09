@@ -3,6 +3,7 @@ import serial.tools.list_ports
 import time
 import logging
 from typing import Optional
+import queue
 
 from config.settings import SERIAL
 
@@ -13,6 +14,7 @@ class SerialBridge:
     def __init__(self):
         self._port: Optional[serial.Serial] = None
         self._connected: bool = False
+        self._event_queue: queue.Queue  = queue.Queue(maxsize=64)
 
     @staticmethod
     def list_ports() -> list[str]:
@@ -45,3 +47,9 @@ class SerialBridge:
         self._connected = False
         
         log.info("[Serial] Disconnected")
+
+    def poll_event(self) -> Optional[dict]:
+        try:
+            return self._event_queue.get_nowait()
+        except queue.Empty:
+            return None

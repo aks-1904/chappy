@@ -1,5 +1,5 @@
 import sys
-import time;
+import time
 from pathlib import Path
 import logging
 import argparse

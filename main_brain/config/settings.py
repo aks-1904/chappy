@@ -39,3 +39,9 @@ AUDIO = {
 MEMORY = {
     "db_path": str(BASE_DIR / "data" / "memory.db"),
 }
+
+PROXIMITY = {
+    "greet_distance":   80,    # Start greeting when person is within 80cm
+    "handshake_dist":   40,    # Offer handshake when within 40cm
+    "too_close":        15,    # Back-off warning
+}
