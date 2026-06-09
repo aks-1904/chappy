@@ -5,7 +5,7 @@ import threading
 import time
 
 from core.serial_bridge import SerialBridge
-from modules.vision import VisionModule
+from modules.vision import VisionModule, Perception
 from modules.speech import SpeechModule
 from modules.memory import MemoryModule
 from config.settings import PROXIMITY
@@ -32,6 +32,8 @@ class RobotBrain:
         self._state_lock: threading.Lock = threading.Lock()
 
         self._last_sensor: dict = {}
+        self._last_greeted: dict = {} # name -> timestamp
+        self._active_user: str = "Guest"
 
     # State helpers
     def _set_state(self, new_state: RobotState):
@@ -77,8 +79,52 @@ class RobotBrain:
         
         log.info("[Robot Brain Stopped]")
 
+    # Vision-Driven Greet + Recognition
     def _greet_by_proximity(self):
-        pass
+        time.sleep(0.5) # letting vision catch up
+        perception = self.vision.get_perception()
+        name = self._get_active_user_from_perception(perception)
+        self._greet_user(name, perception.dominant_emotion)
+
+    def _greet_user(self, name: str, emotion: str = "neutral"):
+        now = time.time()
+        last = self._last_greeted.get(name, 0)
+        if now - last < 60: # Don't re-greet within 60 seconds
+            return
+        
+        self._last_greeted[name] = now
+        self._active_user = name
+
+        # Update memory
+        self.memory.upsert_user(name)
+
+        # Check if known user
+        user = self.memory.get_user(name)
+        is_known = user and user.get("preferences", {})
+
+        if name == "Guest":
+            greeting = "Hello there! I notices someone nearby. Welcome!"
+        else:
+            greeting = f"Hello {name}! Great to see you. [GESTURE:wave]"
+
+            if is_known:
+                # Adding a personal touch from memory
+                last_seen = user.get("last_seen", now)
+                hours_ago = (now - last_seen) / 3600
+
+                if hours_ago > 8:
+                    greeting = f"Welcome back, {name}! I missed you. [GESTURE:wave]"
+        
+        self._set_state(RobotState.GREETING)
+        self.serial.gesture("wave")
+        self._speak(greeting, emotion)
+        self._set_state(RobotState.IDLE)
+
+    def _get_active_user_from_perception(self, perception: Perception) -> str:
+        if perception.known_names:
+            return perception.known_names[0]
+
+        return "Guest"
 
     def _offer_handshake(self):
         pass
@@ -137,9 +183,20 @@ class RobotBrain:
 
             elif event == "error":
                 log.warning(f"[Brain] Arduino error: {data}")
+
+    def _speak(self, text: str, emotion: str = "neutral"):
+        log.info(f"[Robot Brain] Speaking ({emotion}): {text!r}")
+        # Robot speaks about reminder (To be implemented later)
     
     def _check_reminders(self):
-        pass
+        reminders = self.memory.get_due_reminders()
+
+        for r in reminders:
+            log.info(f"[Robot Brain] Reminder due: {r['text']}")
+            self.memory.mark_reminder_done(r['id'])
+            user = r['user_name']
+            msg = f"Reminder for {user}: {r['text']}"
+            self._speak(msg, emotion="neutral")
 
     def get_transcription(self):
         pass

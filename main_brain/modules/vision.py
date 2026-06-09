@@ -115,6 +115,7 @@ class VisionModule:
         fname = os.path.join(save_dir, f"{int(time.time())}.jpg")
         cv2.imwrite(fname, crop)
         log.info(f"[Vision] Registerd face for '{name}' -> '{fname}'")
+        self._load_known_faces() # Reload known faces
 
         return True
 
@@ -144,3 +145,7 @@ class VisionModule:
 
             with self._lock:
                 self.latest_perception = perception
+
+    def get_perception(self) -> Perception:
+        with self._lock:
+            return self.latest_perception

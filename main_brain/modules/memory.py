@@ -179,3 +179,28 @@ class MemoryModule:
                     )""",
                     (user_name, count - max_h),
                 )
+
+    # Reminders
+    def add_reminder(self, user_name: str, text: str, due_time: float):
+        with self._conn() as con:
+            con.execute(
+                "INSERT INTO reminders(user_name, text, due_time) VALUES (?,?,?)",
+                (user_name, text, due_time),
+            )
+        log.info(f"[Memory] Reminder for {user_name}: {text!r}")
+
+    def get_due_reminders(self) -> list[dict]:
+        """Return all reminders that are due and not yet done."""
+        now = time.time()
+        with self._conn() as con:
+            rows = con.execute(
+                "SELECT * FROM reminders WHERE due_time<=? AND done=0",
+                (now,),
+            ).fetchall()
+        return [dict(r) for r in rows]
+    
+    def mark_reminder_done(self, reminder_id: int):
+        with self._conn() as con:
+            con.execute(
+                "UPDATE reminders SET done=1 WHERE id=?", (reminder_id,)
+            )
