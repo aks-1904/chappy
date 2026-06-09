@@ -15,3 +15,23 @@ SERIAL = {
     "timeout": 2, # In Seconds
     "reconnect_delay": 3, # Time between reconnect attempts (Seconds)
 }
+
+VISION = {
+    "camera_index": 0,
+    "frame_width": 640,
+    "frame_height": 480,
+    "fps": 20,
+    "face_detection_every": 3, # process every Nth frame (performance)
+    "emotion_detection_every": 10,
+    "face_db_path": str[BASE_DIR / "data" / "faces"],
+    "unknown_label": "Stranger",
+    "min_face_confidence": 0.70
+}
+
+AUDIO = {
+    # Speech to text(whisper)
+    "whisper_model": "base", # tiny | base | small | medium | large
+    "tts_voice_index": 0, # 0 = first available voice
+    "tts_rate": 165, # Words per minute
+    "ts_volume": 0.95,
+}

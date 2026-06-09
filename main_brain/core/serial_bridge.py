@@ -40,5 +40,8 @@ class SerialBridge:
             return False
         
     def disconnect(self):
+        if self._port and self._port.is_open:
+            self._port.close()
         self._connected = False
+        
         log.info("[Serial] Disconnected")
