@@ -8,7 +8,8 @@ from core.serial_bridge import SerialBridge
 from modules.vision import VisionModule, Perception
 from modules.speech import SpeechModule
 from modules.memory import MemoryModule
-from config.settings import PROXIMITY
+from modules.llm_engine import LLMEngine
+from config.settings import PROXIMITY, EMOTION_GESTURES
 
 log = logging.getLogger(__name__)
 
@@ -26,6 +27,7 @@ class RobotBrain:
         self.vision = VisionModule()
         self.speech = SpeechModule()
         self.memory = MemoryModule()
+        self.llm = LLMEngine()
 
         self._running: bool = False
         self._state: RobotState = RobotState.IDLE
@@ -213,8 +215,57 @@ class RobotBrain:
     def get_transcription(self):
         pass
 
-    def _conversation_turn(self):
-        pass
+    def _conversation_turn(self, user_text: str):
+        if not user_text.strip():
+            return
+        
+        perception = self.vision.get_perception()
+        emotion = perception.dominant_emotion
+
+        # Persist
+        self.memory.upsert_user(self._active_user)
+        self.memory.add_interaction(self._active_user, "user", user_text, emotion)
+
+        # Thinking State
+        self._set_state(RobotState.THINKING)
+        self.serial.thinking_start()
+
+        # LLM call
+        memory_ctx = self.memory.build_context_for_llm(self._active_user)
+        history = self.memory.to_llm_messages(self._active_user)
+
+        clean_response, gestures = self.llm.generate_response(
+            user_input=user_text,
+            memory_context=memory_ctx,
+            emotion=emotion,
+            history=history,
+        )
+
+        # Stop thinking
+        self.serial.thinking_stop()
+        self._set_state(RobotState.SPEAKING)
+
+        # Execute first gesture (non-blocking, fires while speaking)
+        if gestures:
+            self.serial.gesture(gestures[0])
+        # Also map emotion to gesture if no explicit gesture
+        elif emotion != "neutral":
+            emotion_gesture = EMOTION_GESTURES.get(emotion)
+            if emotion_gesture:
+                gesture_name = emotion_gesture.replace("gesture_", "")
+                self.serial.gesture(gesture_name)
+
+        # Speak
+        self.serial.speaking_start()
+        self._speak(clean_response, emotion)
+        self.serial.speaking_stop()
+
+        # Save robot response
+        self.memory.add_interaction(
+            self._active_user, "robot", clean_response, "neutral"
+        )
+
+        self._set_state(RobotState.IDLE)
 
     def _main_loop(self):
         self.speech.start_listening_thread() # Start listening thread - pushes to SpeechModule queue

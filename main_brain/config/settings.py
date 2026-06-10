@@ -38,10 +38,42 @@ AUDIO = {
 
 MEMORY = {
     "db_path": str(BASE_DIR / "data" / "memory.db"),
+    "summary_after": 20, # summarize older interactions after N turns
+    "max_history": 200 # max interactions stored per user
 }
 
 PROXIMITY = {
     "greet_distance":   80,    # Start greeting when person is within 80cm
     "handshake_dist":   40,    # Offer handshake when within 40cm
     "too_close":        15,    # Back-off warning
+}
+
+LLM = {
+    "ollama_host": "http://localhost:11434",
+    "model": "phi4-mini", # phi4-mini | llama3.2:3b
+    "system_prompt": (
+        "You are a friendly home companion robot. "
+        "You are warm, helpful, and concise. "
+        "You remember people and their preferences. "
+        "You adapt your tone based on the user's emotional state. "
+        "Keep responses under 3 sentences unless detail is needed. "
+        "When you want the robot to perform a gesture, include a tag like "
+        "[GESTURE:wave], [GESTURE:happy], [GESTURE:sad], [GESTURE:nod], "
+        "[GESTURE:shake], [GESTURE:handshake], [GESTURE:surprised], [GESTURE:point]. "
+        "Current context will be provided before each message."
+    ),
+    "context_messages": 10, # How many past turns to include
+    "temperature":       0.75,
+    "max_tokens":        512,
+    "timeout_seconds":   30,
+}
+
+EMOTION_GESTURES = {
+    "happy":     "gesture_happy",
+    "sad":       "gesture_sad",
+    "angry":     "gesture_shake",
+    "fear":      "gesture_surprised",
+    "surprise":  "gesture_surprised",
+    "neutral":   None,
+    "disgust":   None,
 }

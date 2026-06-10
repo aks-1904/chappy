@@ -52,6 +52,21 @@ class SerialBridge:
         self._connected = False
         
         log.info("[Serial] Disconnected")
+
+    def thinking_start(self):
+        self.send("thinking_start")
+
+    def thinking_stop(self):
+        self.send("thinking_stop")
+
+    def speaking_start(self):
+        self.send("speaking_start")
+    
+    def speaking_stop(self):
+        self.send("speaking_stop")
+    
+    def neutral(self):
+        self.send("neutral")
     
     def send(self, cmd: str, payload: Optional[dict] = None) -> bool:
         if not self._connected:
