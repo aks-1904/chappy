@@ -5,6 +5,7 @@ import sqlite3
 import time
 from typing import Optional
 import json
+import datetime
 
 from config.settings import MEMORY
 
@@ -45,6 +46,9 @@ CREATE INDEX IF NOT EXISTS idx_reminders_due
     ON reminders(due_time, done);
 """
 
+def _fmt_time(ts: float) -> str:
+    return datetime.datetime.fromtimestamp(ts).strftime("%Y-%m-%d %h:%M")
+
 class MemoryModule:
     def __init__(self):
         db_path = Path(MEMORY["db_path"])
@@ -73,6 +77,44 @@ class MemoryModule:
             raise
         finally:
             con.close()
+
+    def build_context_for_llm(self, user_name: str) -> str:
+        user = self.get_user(user_name)
+        if not user:
+            return f"You are speaking with an unkown person."
+        
+        history = self.get_history(user_name, limit=MEMORY["summary_after"])
+        prefs = user["preferences"]
+        notes = user.get("notes", "")
+
+        lines = [
+            f"User: {user_name}",
+            f"Known since: {_fmt_time(user['first_seen'])}",
+            f"Last seen:   {_fmt_time(user['last_seen'])}",
+        ]
+        if prefs:
+            lines.append(f"Preferences: {json.dumps(prefs)}")
+        if notes:
+            lines.append(f"Notes: {notes}")
+
+        # Recent conversation turns
+        if history:
+            lines.append("Recent conversation:")
+            for turn in history[-6:]:   # last 3 exchanges
+                speaker = "Human" if turn["role"] == "user" else "Robot"
+                lines.append(f"  {speaker}: {turn['message']}")
+
+        return "\n".join(lines)
+
+    def to_llm_messages(self, user_name: str) -> list[dict]:
+        history = self.get_history(
+            user_name, limit=MEMORY["summary_after"]
+        )
+        messages = []
+        for turn in history:
+            role = "user" if turn["role"] == "user" else "assistant"
+            messages.append({"role": role, "content": turn["message"]})
+        return messages
 
     def upsert_user(self, name: str) -> dict:
         now = time.time()

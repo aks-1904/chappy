@@ -20,8 +20,6 @@ class SerialBridge:
         self._event_queue: queue.Queue  = queue.Queue(maxsize=64)
         self._gesture_callbacks: dict[str, Callable] = {}
         self._lock: threading.Lock = threading.Lock()
-        self._stop_event: threading.Event = threading.Event()
-        self._reader_thread: Optional[threading.Thread] = None
 
     @staticmethod
     def list_ports() -> list[str]:
@@ -54,73 +52,6 @@ class SerialBridge:
         self._connected = False
         
         log.info("[Serial] Disconnected")
-
-    @property
-    def connected(self) -> bool:
-        return self._connected
-
-    def _start_reader(self):
-        self._stop_event.clear()
-        self._reader_thread = threading.Thread(
-            target=self._reader_loop,
-            name="SerialReader",
-            daemon=True,
-        )
-        self._reader_thread.start()
-
-    def _reader_loop(self):
-        while not self._stop_event.is_set():
-            if not self._port or not self._port.is_open:
-                break
-
-            try:
-                raw = self._port.readline()
-                if not raw:
-                    continue
-
-                line = raw.decode("utf-8", errors="ignore").strip()
-                if not line:
-                    continue
-
-                try:
-                    msg = json.loads(line)
-                    self._dispatch(msg)
-                except json.JSONDecodeError:
-                    log.debug(f"[Serial] Non-JSON line: {line}")
-            except serial.SerialException as e:
-                log.warning(f"[Serial] Read error: {e}")
-                self._connected = False
-
-                threading.Thread(
-                    target=self._reconnect_loop,
-                    daemon=True
-                ).start()
-                break
-    
-    def _dispatch(self, msg: dict):
-        event = msg.get("event", "")
-        data = msg.get("data", {})
-
-        # Put on queue for main-thread consumers
-        try:
-            self._event_queue.put_nowait(msg)
-        except queue.Full:
-            self._event_queue.get_nowait() # drop oldest
-            self._event_queue.put_nowait(msg)
-
-        if event == "gesture_done":
-            gesture = data.get("gesture", "")
-            cb = self._gesture_callbacks.pop(self.gesture, None)
-            if cb:
-                cb()
-
-    def _reconnect_loop(self):
-        delay = SERIAL["reconnect_delay"]
-        log.info(f"[Serial] Reconnecting in {delay}s...")
-        while not self._stop_event.is_set() and not self._connected:
-            time.sleep(delay)
-            log.info("[Serial] Attempting reconnect...")
-            self.connect()
 
     def thinking_start(self):
         self.send("thinking_start")

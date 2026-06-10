@@ -10,6 +10,8 @@ from modules.speech import SpeechModule
 from modules.memory import MemoryModule
 from modules.llm_engine import LLMEngine
 from config.settings import PROXIMITY, EMOTION_GESTURES
+from modules.llm_engine import LLMEngine
+from config.settings import PROXIMITY, EMOTION_GESTURES
 
 log = logging.getLogger(__name__)
 
@@ -27,6 +29,7 @@ class RobotBrain:
         self.vision = VisionModule()
         self.speech = SpeechModule()
         self.memory = MemoryModule()
+        self.llm = LLMEngine()
         self.llm = LLMEngine()
 
         self._running: bool = False
@@ -136,14 +139,29 @@ class RobotBrain:
         self._speak("Want to shake hands?", "neutral")
         self.serial.gesture("handshake")
         self._set_state(RobotState.IDLE)
+        if self.state not in (RobotState.IDLE, RobotState.GREETING):
+            return
+        
+        self._set_state(RobotState.GESTURE_ONLY)
+        self._speak("Want to shake hands?", "neutral")
+        self.serial.gesture("handshake")
+        self._set_state(RobotState.IDLE)
 
     def _greet_by_pir(self):
         time.sleep(1)
         perception = self.vision.get_perception()
         name = self._get_active_user_from_perception(perception)
         self._greet_user(name, perception.dominant_emotion)
+        time.sleep(1)
+        perception = self.vision.get_perception()
+        name = self._get_active_user_from_perception(perception)
+        self._greet_user(name, perception.dominant_emotion)
 
     def _do_handshake_response(self):
+        self._set_state(RobotState.GESTURE_ONLY)
+        self.serial.gesture("handshake")
+        self._speak("Nice to meet you!", "happy")
+        self._set_state(RobotState.IDLE)
         self._set_state(RobotState.GESTURE_ONLY)
         self.serial.gesture("handshake")
         self._speak("Nice to meet you!", "happy")
@@ -200,6 +218,7 @@ class RobotBrain:
 
     def _speak(self, text: str, emotion: str = "neutral"):
         log.info(f"[Robot Brain] Speaking ({emotion}): {text!r}")
+        self.speech.speak(text, emotion=emotion, blocking=True)
         self.speech.speak(text, emotion=emotion, blocking=True)
     
     def _check_reminders(self):

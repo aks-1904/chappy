@@ -61,7 +61,6 @@ PROXIMITY = {
 }
 
 LLM = {
-    "backend": "ollama", # "ollama" | "openai"
     "ollama_host": "http://localhost:11434",
     "model": "phi4-mini", # phi4-mini | llama3.2:3b
     "system_prompt": (
