@@ -9,6 +9,9 @@ import tempfile
 import wave
 from pathlib import Path
 import queue
+from TTS.api import TTS as CoquiTTS
+import sounddevice as sd
+import soundfile  as sf
 
 from config.settings import AUDIO
 
@@ -29,6 +32,8 @@ class SpeechModule:
         self._tts_engine = None
         self.on_transcription: Optional[Callable[[str], None]] = None
         self._stt_queue: queue.Queue  = queue.Queue()
+        self._tts_lock = threading.Lock()
+        self._speaking = False
 
     def start(self):
         self._init_tts()
@@ -41,6 +46,59 @@ class SpeechModule:
         self._listening = False
         self._audio.terminate()
         log.info("[Speech] Stopped")
+
+    # Map emotion -> (rate_multiplier, volume_multiplier)
+    _EMOTION_PARAMS = {
+        "happy":     (1.20, 1.0),
+        "sad":       (0.80, 0.8),
+        "angry":     (1.10, 1.0),
+        "fear":      (1.15, 0.9),
+        "surprise":  (1.10, 1.0),
+        "neutral":   (1.00, 1.0),
+        "disgust":   (0.95, 0.85),
+    }
+
+    def get_transcription(self) -> Optional[str]:
+        try:
+            return self._stt_queue.get_nowait()
+        except queue.Empty:
+            return None
+
+    def speak(self, text: str, emotion: str = "neutral", blocking: bool = False):
+        if not text.strip():
+            return
+        
+        def _do_speak():
+            with self._tts_lock:
+                self._speaking = True
+                self._speak_with_emotion(text, emotion)
+                self._speaking = False
+
+        if blocking:
+            _do_speak()
+        else:
+            t = threading.Thread(target=_do_speak, daemon=True)
+            t.start()
+
+    def _speak_with_emotion(self, text: str, emotion: str):
+        rate_mult, vol_mult = self._EMOTION_PARAMS.get(emotion.lower(), (1.0, 1.0))
+        base_rate = AUDIO["tts_rate"]
+        base_vol = AUDIO["tts_volume"]
+
+        if self._tts_engine:
+            try:
+                self._tts_engine.setProperty("rate", int(base_rate * rate_mult))
+                self._tts_engine.setProperty("volume", base_vol * vol_mult)
+                self._tts_engine.say(text)
+                self._tts_engine.runAndWait()
+
+                # Reset to neutral
+                self._tts_engine.setProperty("rate",   base_rate)
+                self._tts_engine.setProperty("volume", base_vol)
+            except Exception as e:
+                log.error(f"[Speech] TTS error: {e}")
+        else:
+            log.warning(f"[Speech] No TTS engine — would say: {text!r}")
 
     def _init_tts(self):
         try:
@@ -139,3 +197,31 @@ class SpeechModule:
         t.start()
 
         return t
+    
+    def speak_coqui(self, text: str, blocking: bool = False):
+        """
+        Use Coqui TTS instead of pyttsx3.
+        Requires: pip install TTS
+        Enable by setting AUDIO['tts_engine'] = 'coqui' in settings.
+        """
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+            out_path = f.name
+
+        def _do_coqui():
+            self._speaking = True
+            try:
+                tts = CoquiTTS(model_name=AUDIO["coqui_model"], progress_bar=False)
+                tts.tts_to_file(text=text, file_path=out_path)
+                data, sr = sf.read(out_path)
+                sd.play(data, sr)
+                sd.wait()
+            except Exception as e:
+                log.error(f"[Speech] Coqui TTS error: {e}")
+            finally:
+                self._speaking = False
+                Path(out_path).unlink(missing_ok=True)
+
+        if blocking:
+            _do_coqui()
+        else:
+            threading.Thread(target=_do_coqui, daemon=True).start()

@@ -7,7 +7,7 @@ import numpy as np
 from dataclasses import dataclass, field
 import os
 from deepface import DeepFace
-import mediapipe
+import mediapipe as mp
 
 from config.settings import VISION
 
@@ -33,6 +33,10 @@ class VisionModule:
         self._lock: threading.Lock = threading.Lock()
         self.latest_frame:      Optional[np.ndarray] = None
         self.latest_perception: Perception = Perception()
+        self._mp_face = mp.solutions.face_detection.FaceDetection(
+                model_selection=0,
+                min_detection_confidence=VISION["min_face_confidence"],
+            )
 
         self._load_known_faces()
         self._known_faces: dict[str, list] = {}
@@ -123,6 +127,88 @@ class VisionModule:
         with self._lock:
             return self.latest_frame.copy() if self.latest_frame is not None else None
 
+    def _detect_faces(self, frame: np.ndarray) -> list[dict]:
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        results = self._mp_face.process(rgb)
+        faces = []
+        if not results.detections:
+            return faces
+        
+        h, w = frame.shape[:2]
+        for det in results.detections:
+            bb = det.location_data.relative_bounding_box
+            x = max(0, int(bb.xmin * w))
+            y = max(0, int(bb.ymin * h))
+            fw = int(bb.width  * w)
+            fh = int(bb.height * h)
+            faces.append({
+                "name":       VISION["unknown_label"],
+                "emotion":    "neutral",
+                "bbox":       (x, y, fw, fh),
+                "confidence": det.score[0] if det.score else 0.0,
+            })
+            
+        return faces
+    
+    def _recognize_faces(
+        self, frame: np.ndarray, faces: list[dict]
+    ) -> list[dict]:
+        h, w = frame.shape[:2]
+        for face in faces:
+            x, y, fw, fh = face["bbox"]
+
+            # Crop face region with small padding
+            pad = 10
+            x1, y1 = max(0, x - pad), max(0, y - pad)
+            x2, y2 = min(w, x + fw + pad), min(h, y + fh + pad)
+            crop = frame[y1:y2, x1:x2]
+
+            if crop.size == 0:
+                continue
+            try:
+                emb_result = DeepFace.represent(
+                    img_path=crop,
+                    model_name="Facenet",
+                    enforce_detection=False,
+                )
+                query_emb = np.array(emb_result[0]["embedding"])
+                best_name  = VISION["unknown_label"]
+                best_dist  = float("inf")
+                for name, embeddings in self._known_faces.items():
+                    for known_emb in embeddings:
+                        dist = float(
+                            np.linalg.norm(query_emb - np.array(known_emb))
+                        )
+                        if dist < best_dist:
+                            best_dist = dist
+                            best_name = name
+                THRESHOLD = 10.0   # Facenet L2 threshold
+                if best_dist < THRESHOLD:
+                    face["name"] = best_name
+            except Exception as e:
+                log.debug(f"[Vision] Recognition error: {e}")
+
+        return faces
+
+    def _detect_emotions(
+        self, frame: np.ndarray, faces: list[dict]
+    ) -> list[dict]:
+        try:
+            results = DeepFace.analyze(
+                img_path=frame,
+                actions=["emotion"],
+                enforce_detection=False,
+                silent=True,
+            )
+            if not isinstance(results, list):
+                results = [results]
+            for i, face in enumerate(faces):
+                if i < len(results):
+                    face["emotion"] = results[i].get("dominant_emotion", "neutral")
+        except Exception as e:
+            log.debug(f"[Vision] Emotion error: {e}")
+        return faces
+
     def _capture_loop(self):
         while self._running:
             ret, frame = self._cap.read()
@@ -141,7 +227,26 @@ class VisionModule:
             perception = Perception(timestamp=time.time())
 
             if self._frame_count % VISION["face_detection_every"] == 0:
-                pass # Detect face every (To be implement later)
+                faces = self._detect_faces(frame)
+                # Run recognition on detected faces
+                if self._frame_count % (VISION["face_detection_every"] * 2) == 0:
+                    faces = self._recognize_faces(frame, faces)
+
+                # Run emotion on heavier schedule
+                if (self._frame_count % VISION["emotion_detection_every"] == 0 and len(faces) > 0):
+                    faces = self._detect_emotions(frame, faces)
+                
+                perception.faces        = faces
+                perception.face_count   = len(faces)
+                perception.known_names  = [
+                    f["name"] for f in faces
+                    if f["name"] != VISION["unknown_label"]
+                ]
+                emotions = [f.get("emotion", "neutral") for f in faces]
+                if emotions:
+                    perception.dominant_emotion = max(
+                        set(emotions), key=emotions.count
+                    )
 
             with self._lock:
                 self.latest_perception = perception
