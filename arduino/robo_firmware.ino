@@ -74,6 +74,8 @@ float readUltrasonic();
 void handleCommand(const char *);
 void setGestureState();
 void updateThinkingAnimation();
+void startThinking();
+void stopThinking();
 
 // Gestures
 void gestureWave();
@@ -83,9 +85,14 @@ void gestureShake();
 void gestureHappy();
 void gestureSad();
 void gestureSurprised();
-void moveServoSlow(Servo &, int, int, int)
+void gesturePointForward();
+void gestureHugLeg();
+void gestureComfortPat();
+void gestureHugReach();
+void moveServoSlow(Servo &, int, int, int);
+void moveServoBoth(int, int, int);
 
-    void setup()
+void setup()
 {
     Serial.begin(SERIAL_BAUD);
     while (!Serial)
@@ -120,6 +127,20 @@ void loop()
     readSerial();
     updateSensors();
     updateThinkingAnimation();
+}
+
+void startThinking()
+{
+    robotState = STATE_THINKING;
+    thinkingStartMs = millis();
+    digitalWrite(LED_PIN, HIGH);
+}
+
+void stopThinking()
+{
+    robotState = STATE_IDLE;
+    setNeutral();
+    digitalWrite(LED_PIN, LOW);
 }
 
 void moveServoSlow(Servo &s, int from, int to, int stepDelayMs)
@@ -232,28 +253,211 @@ void gestureHappy()
 }
 
 // Sad: arms droop, head tilts down
-void gestureSad() {
-  moveServoSlow(headTilt, HEAD_TILT_NEUTRAL, HEAD_TILT_NEUTRAL + 20, 5);
-  delay(1200);
-  moveServoSlow(headTilt, HEAD_TILT_NEUTRAL + 20, HEAD_TILT_NEUTRAL, 5);
-  setNeutral(); robotState = STATE_IDLE;
-  digitalWrite(LED_PIN, LOW);
-  sendEvent("gesture_done", "{\"gesture\":\"sad\"}");
+void gestureSad()
+{
+    moveServoSlow(headTilt, HEAD_TILT_NEUTRAL, HEAD_TILT_NEUTRAL + 20, 5);
+    delay(1200);
+    moveServoSlow(headTilt, HEAD_TILT_NEUTRAL + 20, HEAD_TILT_NEUTRAL, 5);
+    setNeutral();
+    robotState = STATE_IDLE;
+    digitalWrite(LED_PIN, LOW);
+    sendEvent("gesture_done", "{\"gesture\":\"sad\"}");
 }
 
 // Surprised: head snaps up, arms fling up
-void gestureSurprised() {
-  headTilt.write(HEAD_TILT_NEUTRAL - 30);
-  leftArm.write(90);
-  rightArm.write(90);
+void gestureSurprised()
+{
+    headTilt.write(HEAD_TILT_NEUTRAL - 30);
+    leftArm.write(90);
+    rightArm.write(90);
+    delay(600);
+    headTilt.write(HEAD_TILT_NEUTRAL);
+    moveServoSlow(leftArm, 90, LEFT_ARM_NEUTRAL, 8);
+    moveServoSlow(rightArm, 90, RIGHT_ARM_NEUTRAL, 8);
+    setNeutral();
+    robotState = STATE_IDLE;
+    digitalWrite(LED_PIN, LOW);
+    sendEvent("gesture_done", "{\"gesture\":\"surprised\"}");
+}
+
+// Point forward with right arm
+void gesturePointForward()
+{
+    moveServoSlow(rightArm, RIGHT_ARM_NEUTRAL, 90, 6);
+    headPan.write(HEAD_PAN_NEUTRAL);
+    delay(1000);
+    moveServoSlow(rightArm, 90, RIGHT_ARM_NEUTRAL, 6);
+    setNeutral();
+    robotState = STATE_IDLE;
+    digitalWrite(LED_PIN, LOW);
+    sendEvent("gesture_done", "{\"gesture\":\"point\"}");
+}
+
+// Move both arms simultaneously toward targets (Helper)
+void moveServoBoth(int leftTarget, int rightTarget, int stepDelay)
+{
+    int lCurrent = leftArm.read();
+    int rCurrent = rightArm.read();
+    int steps = max(abs(leftTarget - lCurrent), abs(rightTarget - rCurrent));
+    for (int i = 1; i <= steps; i++)
+    {
+        float t = (float)i / steps;
+        leftArm.write(lCurrent + (int)((leftTarget - lCurrent) * t));
+        rightArm.write(rCurrent + (int)((rightTarget - rCurrent) * t));
+        delay(stepDelay);
+    }
+    leftArm.write(leftTarget);
+    rightArm.write(rightTarget);
+}
+
+void gestureHugLeg()
+{
+    // Lean head forward and down
+    moveServoSlow(headTilt, HEAD_TILT_NEUTRAL, HEAD_TILT_NEUTRAL + 25, 6);
+
+    // Both arms sweep outward
+    moveServoSlow(45, 135, 7);
+    delay(200);
+
+    // Arms wrap inward
+    moveServoBoth(75, 105, 5); // close in
+    delay(300);
+    moveServoBoth(82, 98, 4) // Squeeze
+        delay(1500);         // Hold the hug
+
+    // Release slowly
+    moveServoBoth(60, 120, 6);
+    delay(200);
+    moveServoBoth(LEFT_ARM_NEUTRAL, RIGHT_ARM_NEUTRAL, 7);
+
+    // Head back up with a gentle tilt
+    moveServoSlow(headTilt, HEAD_TILT_NEUTRAL + 25, HEAD_TILT_NEUTRAL - 5, 6);
+    delay(300);
+    moveServoSlow(headTilt, HEAD_TILT_NEUTRAL - 5, HEAD_TILT_NEUTRAL, 5);
+
+    setNeutral();
+    robotState = STATE_IDLE;
+    digitalWrite(LED_PIN, LOW);
+    sendEvent("gesture_done", "{\"gesture\":\"hug_leg\"}");
+}
+
+void gestureHugWaist()
+{
+    // Head tilts forward
+    moveServoSlow(headTilt, HEAD_TILT_NEUTRAL, HEAD_TILT_NEUTRAL + 15, 6);
+
+    // Arms rise to mid position
+    moveServoBoth(60, 120, 7);
+    delay(150);
+
+    // Arms open wide
+    moveServoBoth(35, 145, 6);
+    delay(300);
+
+    // Arms wrap in firmly
+    moveServoBoth(72, 108, 5);
+    delay(300);
+    moveServoBoth(80, 100, 4); // tight hug
+    delay(1800);               // hold
+
+    // Gentle pat during hold (right arm only)
+    for (int i = 0; i < 3; ++i)
+    {
+        rightArm.write(95);
+        delay(200);
+        rightArm.write(100);
+        delay(200);
+    }
+
+    // Release
+    moveServoBoth(50, 130, 7);
+    delay(200);
+    moveServoBoth(LEFT_ARM_NEUTRAL, RIGHT_ARM_NEUTRAL, 8);
+    moveServoSlow(headTilt, HEAD_TILT_NEUTRAL + 15, HEAD_TILT_NEUTRAL, 5);
+
+    setNeutral();
+    robotState = STATE_IDLE;
+    digitalWrite(LED_PIN, LOW);
+    sendEvent("gesture_done", "{\"gesture\":\"hug_waist\"}");
+}
+
+void gestureHugReach()
+{
+    // Head tilts back slightly
+    moveServoSlow(headTilt, HEAD_TILT_NEUTRAL, HEAD_TILT_NEUTRAL - 20, 6);
+
+    // Both arms sweep up high
+    moveServoBoth(LEFT_ARM_NEUTRAL, RIGHT_ARM_NEUTRAL, 8); // ensure start
+    delay(100);
+    moveServoBoth(70, 110, 6); // mid
+    delay(100);
+    moveServoBoth(88, 92, 5); // reaching up
+
+    delay(400);
+
+    // Wrap inward - hugging around their head/shoulders
+    moveServoBoth(83, 97, 4); // slight close
+    delay(2000); // long warm hold
+
+    // Gentle rhythmic squeeze
+    for (int i = 0; i < 2; i++)
+    {
+        moveServoBoth(80, 100, 5);
+        delay(300);
+        moveServoBoth(84, 96, 5);
+        delay(300);
+    }
+
+    // Release - arms slide down gently
+    moveServoBoth(70, 110, 6);
+    delay(200);
+    moveServoBoth(50, 130, 7);
+    delay(200);
+    moveServoBoth(LEFT_ARM_NEUTRAL, RIGHT_ARM_NEUTRAL, 8);
+
+    // Head returns, slight warm nod
+    moveServoSlow(headTilt, HEAD_TILT_NEUTRAL - 20, HEAD_TILT_NEUTRAL - 10, 5);
+    delay(300);
+    moveServoSlow(headTilt, HEAD_TILT_NEUTRAL - 10, HEAD_TILT_NEUTRAL, 5);
+
+    setNeutral();
+    robotState = STATE_IDLE;
+    digitalWrite(LED_PIN, LOW);
+    sendEvent("gesture_done", "{\"gesture\":\"hug_reach\"}");
+}
+
+void gestureComfortPat() {
+  // Head tilts gently to one side
+  moveServoSlow(headPan, HEAD_PAN_NEUTRAL, HEAD_PAN_NEUTRAL + 12, 6);
+  moveServoSlow(headTilt, HEAD_TILT_NEUTRAL, HEAD_TILT_NEUTRAL + 10, 6);
+
+  // Right arm extends to comfortable reach
+  moveServoSlow(rightArm, RIGHT_ARM_NEUTRAL, 105, 7);
+  delay(300);
+
+  // Gentle rhythmic pats (5 pats)
+  for (int i = 0; i < 5; i++) {
+    moveServoSlow(rightArm, 105, 98, 4); // forward
+    delay(100);
+    moveServoSlow(rightArm, 98, 105, 4); // back
+    delay(180);
+  }
+
+  // Hold at gentle position
   delay(600);
-  headTilt.write(HEAD_TILT_NEUTRAL);
-  moveServoSlow(leftArm,  90, LEFT_ARM_NEUTRAL,  8);
-  moveServoSlow(rightArm, 90, RIGHT_ARM_NEUTRAL, 8);
+
+  // Arm slowly retreats
+  moveServoSlow(rightArm, 105, RIGHT_ARM_NEUTRAL, 8);
+
+  // Head returns softly
+  moveServoSlow(headPan,  HEAD_PAN_NEUTRAL + 12, HEAD_PAN_NEUTRAL, 6);
+  moveServoSlow(headTilt, HEAD_TILT_NEUTRAL + 10, HEAD_TILT_NEUTRAL, 6);
+
   setNeutral(); robotState = STATE_IDLE;
   digitalWrite(LED_PIN, LOW);
-  sendEvent("gesture_done", "{\"gesture\":\"surprised\"}");
+  sendEvent("gesture_done", "{\"gesture\":\"comfort_pat\"}");
 }
+
 void updateThinkingAnimation()
 {
     if (robotState != STATE_THINKING)
