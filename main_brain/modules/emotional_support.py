@@ -164,13 +164,26 @@ class EmotionalSupportModule:
         if not samples:
             return False
         
-        neg = [s for s in samples if _DISTRESS_WEIGHTS.get(e.emotion, 0) > 0]
+        neg = [s for s in samples if _DISTRESS_WEIGHTS.get(s.emotion, 0) > 0]
         if not neg:
             return False
         
         duration = now - neg[0].timestamp
 
         return duration >= self.CHECKIN_AFTER
+    
+    @staticmethod
+    def _crisis_prompt(nickname: str) -> str:
+        return f"""
+{nickname} may be experiencing a serious emotional crisis.
+THIS IS YOUR MOST IMPORTANT TASK RIGHT NOW:
+- Stay completely calm and grounding.
+- Say clearly and warmly: "I'm here with you. You are not alone."
+- Do NOT minimise, fix, or rush.
+- Gently suggest: "Would it help to talk to someone you trust right now?"
+- Do NOT leave them alone - stay in the conversation.
+- [GESTURE:comfort_pat]
+"""
 
     def get_support_prompt_injection(
             self,
@@ -180,4 +193,47 @@ class EmotionalSupportModule:
             turn: int,
             relation: str = "friend",
     ) -> str:
-        pass
+        if distress == DistressLevel.CRISIS:
+            return self._crisis_prompt(nickname)
+        
+        if turn == 0:
+            # First check-in: gentle opener
+            return f"""
+{nickname} seems to be going through something difficult right now.
+YOUR TASK THIS TURN:
+- Open with warm, gentle concern. Something like "Hey, I noticed you seem a bit down..."
+- Do NOT immediately ask "what's wrong?" - ease in.
+- Offer presence: "I'm right here with you."
+- If appropriate, offer [GESTURE:comfort_pat] or [GESTURE:hug_leg].
+- Keep it short — 2 sentences max. Let them lead.
+"""
+        elif turn == 1:
+            return f"""
+You are in the middle of supporting {nickname} emotionally.
+YOUR TASK THIS TURN:
+- Listen and reflect back what they said. Show you heard them.
+- Validate their feelings FIRST. Never say "but" or "at least".
+- Use phrases like "That makes sense", "I understand why you feel that way."
+- Do not offer solutions yet unless they ask.
+- If they seem very low, offer [GESTURE:hug_leg] or say "I wish I could give you a real hug."
+"""
+        elif turn == 2:
+            return f"""
+{nickname} has been sharing their feelings with you.
+YOUR TASK THIS TURN:
+- Gently ask one clarifying question to understand more deeply.
+- OR if they've shared enough, offer gentle perspective - NOT advice, just reframing.
+- Example: "It sounds like you've been carrying a lot. That takes strength."
+- Still no unsolicited solutions. Follow their lead.
+"""
+        elif turn >= 3:
+            return f"""
+You've been supporting {nickname} for a while.
+YOUR TASK THIS TURN:
+- Gently transition toward encouragement and light hope.
+- Ask: "Is there anything I can do to help right now?"
+- Offer practical help ONLY if they seem ready.
+- If they've perked up, celebrate that subtly. [GESTURE:nod]
+- If still very low, continue listening and remind them they are not alone.
+"""
+        
