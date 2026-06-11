@@ -55,10 +55,17 @@ enum RobotState
 
 RobotState robotState = STATE_IDLE;
 
+// JSON buffers
+StaticJsonDocument<256> inDoc;
+StaticJsonDocument<256> outDoc;
+
 // Functions prototype
 void blinkLED(int);
 void readSerial();
 void setNeutral();
+void sendEvent(const char *, const char *) void handleCommand(const char *);
+void updateSensors();
+float readUltrasonic();
 
 void setup()
 {
@@ -93,22 +100,75 @@ void setup()
 void loop()
 {
     readSerial();
+    updateSensors();
 }
 
-void sendEvent(const char* evt, const char* payloadJson) {
-  // Inline merge: {"event":"...","data":{...}}
-  Serial.print("{\"event\":\"");
-  Serial.print(evt);
-  Serial.print("\",\"data\":");
-  Serial.print(payloadJson);
-  Serial.println("}");
+void updateSensors()
+{
+    unsigned long now = millis();
+    if (now - lastSensorTime < SENSOR_INTERVAL_MS)
+        return;
+    lastSensorTime = now;
+
+    // PIR
+    pirState = digitalRead(PIR_PIN);
+    if (pirState && !pirPrevState)
+    {
+        sendEvent("presence_detected", "{}")
+    }
+    pirPrevState = pirState;
+
+    // Touch
+    touchState = digitalRead(TOUCH_PIN);
+    if (touchState && !touchPrevState)
+    {
+        sendEvent("touch_detected", "{}");
+    }
+    touchPrevState = touchState;
+
+    // Ultrasonic distance
+    distanceCm = readUltrasonic();
+
+    // Send sensor bundle every cycle
+    outDoc.clear();
+    outDoc["event"] = "sensors";
+    outDoc["pir"] = pirState;
+    outDoc["touch"] = touchState;
+    outDoc["dist_cm"] = (int)distanceCm;
+    serializeJson(outDoc, txBuffer);
+    
+    Serial.println(txBuffer);
 }
 
-void setNeutral() {
-  headPan.write(HEAD_PAN_NEUTRAL);
-  headTilt.write(HEAD_TILT_NEUTRAL);
-  leftArm.write(LEFT_ARM_NEUTRAL);
-  rightArm.write(RIGHT_ARM_NEUTRAL);
+float readUltrasonic()
+{
+    digitalWrite(TRIG_PIN, LOW);
+    delayMicroseconds(2);
+    digitalWrite(TRIG_PIN, HIGH);
+    delayMicroseconds(10);
+    digitalWrite(TRIG_PIN, LOW);
+    long duration = pulseIn(ECHO_PIN, HIGH, 30000); // 30ms timeout
+    if (duration == 0)
+        return 400.0f; // No echo = far
+    return duration * 0.0343f / 2.0f;
+}
+
+void sendEvent(const char *evt, const char *payloadJson)
+{
+    // Inline merge: {"event":"...","data":{...}}
+    Serial.print("{\"event\":\"");
+    Serial.print(evt);
+    Serial.print("\",\"data\":");
+    Serial.print(payloadJson);
+    Serial.println("}");
+}
+
+void setNeutral()
+{
+    headPan.write(HEAD_PAN_NEUTRAL);
+    headTilt.write(HEAD_TILT_NEUTRAL);
+    leftArm.write(LEFT_ARM_NEUTRAL);
+    rightArm.write(RIGHT_ARM_NEUTRAL);
 }
 
 void blinkLED(int times)
@@ -131,4 +191,14 @@ void readSerial()
     line.trim();
     if (line.length() == 0)
         return;
+
+    DeserializationError err = deserializeJson(inDoc, line);
+    if (err)
+    {
+        sendEvent("error", "{\"msg\":\"bad_json\"}");
+        return;
+    }
+
+    const char *cmd = inDoc["cmd"] | "";
+    handleCommand(cmd); // To be implement later
 }
