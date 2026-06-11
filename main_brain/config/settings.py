@@ -100,4 +100,5 @@ PERSONA = {
     "greet_cooldown": 600, # seconds before re-greeting same person
     "mood_log_interval": 60,    # seconds between background mood snapshots
     "proactive_checkin_interval": 300,   # seconds between unsolicited wellness checks
+    "hug_offer_distress_level": 2, # DistressLevel value that triggers hug offer
 }
