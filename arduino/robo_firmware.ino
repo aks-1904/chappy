@@ -55,6 +55,11 @@ enum RobotState
 
 RobotState robotState = STATE_IDLE;
 
+// Thinking animation: subtle head oscillation
+unsigned long thinkingStartMs = 0;
+const int THINK_OSCILLATE_RANGE = 15;  // degrees
+const int THINK_OSCILLATE_SPEED = 800; // ms per cycle
+
 // JSON buffers
 StaticJsonDocument<256> inDoc;
 StaticJsonDocument<256> outDoc;
@@ -66,8 +71,16 @@ void setNeutral();
 void sendEvent(const char *, const char *) void handleCommand(const char *);
 void updateSensors();
 float readUltrasonic();
+void handleCommand(const char *);
+void setGestureState();
+void updateThinkingAnimation();
 
-void setup()
+// Gestures
+void gestureWave();
+void gestureHandshake();
+void moveServoSlow(Servo &, int, int, int)
+
+    void setup()
 {
     Serial.begin(SERIAL_BAUD);
     while (!Serial)
@@ -101,6 +114,69 @@ void loop()
 {
     readSerial();
     updateSensors();
+    updateThinkingAnimation();
+}
+
+void moveServoSlow(Servo &s, int from, int to, int stepDelayMs)
+{
+    int step = (to > from) ? 1 : -1;
+    for (int pos = from; pos != to; pos += step)
+    {
+        s.write(pos);
+        delay(stepDelayMs);
+    }
+    s.write(to);
+}
+
+void gestureWave()
+{
+    moveServoSlow(rightArm, RIGHT_ARM_NEUTRAL, 90, 8);
+    for (int i = 0; i < 3; i++)
+    {
+        moveServoSlow(rightArm, 90, 60, 6);
+        moveServoSlow(rightArm, 60, 120, 6);
+    }
+
+    moveServoSlow(rightArm, 90, RIGHT_ARM_NEUTRAL, 8);
+    setNeutral();
+    robotState = STATE_IDLE;
+
+    digitalWrite(LED_PIN, LOW);
+    
+    sendEvent("gesture_done", "{\"gesture\":\"wave\"}");
+}
+
+void gestureHandshake()
+{
+    moveServoSlow(rightArm, RIGHT_ARM_NEUTRAL, 90, 6);
+    delay(800);
+
+    // Simulate grip: slight tilt
+    headTilt.write(HEAD_TILT_NEUTRAL - 10)
+        delay(600);
+    headTilt.write(HEAD_TILT_NEUTRAL);
+    delay(400);
+    moveServoSlow(rightArm, 90, RIGHT_ARM_NEUTRAL, 6);
+    setNeutral();
+    robotState = STATE_IDLE;
+    digitalWrite(LED_PIN, LOW);
+
+    sendEvent("gesture_done", "{\"gesture\":\"handshake\"}");
+}
+
+void updateThinkingAnimation()
+{
+    if (robotState != STATE_THINKING)
+        return;
+
+    // Gentle side-to-side head bob using sine approximation
+    unsigned long elapsed = millis() - thinkingStartMs;
+    float phase = (float)(elapsed % THINK_OSCILLATE_SPEED) / THINK_OSCILLATE_SPEED;
+
+    // Single trangle wave: 0 -> 1 -> 0
+    float tri = (phase < 0.5f) ? (phase * 2.0f) : ((1.0f - phase) * 2.0f);
+    int angle = HEAD_PAN_NEUTRAL - THINK_OSCILLATE_RANGE + (int)(tri * THINK_OSCILLATE_RANGE * 2);
+    headPan.write(angle);
 }
 
 void updateSensors()
@@ -136,7 +212,7 @@ void updateSensors()
     outDoc["touch"] = touchState;
     outDoc["dist_cm"] = (int)distanceCm;
     serializeJson(outDoc, txBuffer);
-    
+
     Serial.println(txBuffer);
 }
 
@@ -201,4 +277,107 @@ void readSerial()
 
     const char *cmd = inDoc["cmd"] | "";
     handleCommand(cmd); // To be implement later
+}
+
+// State Helpers
+void setGestureState()
+{
+    robotState = STATE_GESTURE;
+    digitalWrite(LED_PIN, HIGH);
+}
+
+void handleCommand(const char *cmd)
+{
+    if (strcmp(cmd, "gesture_wave") == 0)
+    {
+        setGestureState();
+        gestureWave();
+    }
+    else if (strcmp(cmd, "gesture_handshake") == 0)
+    {
+        setGestureState();
+        gestureHandshake();
+    }
+    else if (strcmp(cmd, "gesture_nod") == 0)
+    {
+        setGestureState();
+        gestureNod();
+    }
+    else if (strcmp(cmd, "gesture_shake") == 0)
+    {
+        setGestureState();
+        gestureShake();
+    }
+    else if (strcmp(cmd, "gesture_happy") == 0)
+    {
+        setGestureState();
+        gestureHappy();
+    }
+    else if (strcmp(cmd, "gesture_sad") == 0)
+    {
+        setGestureState();
+        gestureSad();
+    }
+    else if (strcmp(cmd, "gesture_surprised") == 0)
+    {
+        setGestureState();
+        gestureSurprised();
+    }
+    else if (strcmp(cmd, "gesture_point") == 0)
+    {
+        setGestureState();
+        gesturePointForward();
+    }
+    else if (strcmp(cmd, "thinking_start") == 0)
+    {
+        startThinking();
+    }
+    else if (strcmp(cmd, "thinking_stop") == 0)
+    {
+        stopThinking();
+    }
+    else if (strcmp(cmd, "speaking_start") == 0)
+    {
+        robotState = STATE_SPEAKING;
+    }
+    else if (strcmp(cmd, "speaking_stop") == 0)
+    {
+        robotState = STATE_IDLE;
+        setNeutral();
+    }
+    else if (strcmp(cmd, "neutral") == 0)
+    {
+        robotState = STATE_IDLE;
+        setNeutral();
+    }
+    else if (strcmp(cmd, "ping") == 0)
+    {
+        sendEvent("pong", "{}");
+    }
+    else if (strcmp(cmd, "gesture_hug_leg") == 0)
+    {
+        setGestureState();
+        gestureHugLeg();
+    }
+    else if (strcmp(cmd, "gesture_hug_waist") == 0)
+    {
+        setGestureState();
+        gestureHugWaist();
+    }
+    else if (strcmp(cmd, "gesture_hug_reach") == 0)
+    {
+        setGestureState();
+        gestureHugReach();
+    }
+    else if (strcmp(cmd, "gesture_comfort_pat") == 0)
+    {
+        setGestureState();
+        gestureComfortPat();
+    }
+    else
+    {
+        sendEvent("error", "{\"msg\":\"unknown_cmd\"}");
+        return;
+    }
+    sendEvent("ack", "{}");
 }
