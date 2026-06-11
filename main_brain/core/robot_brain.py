@@ -9,6 +9,7 @@ from modules.vision import VisionModule, Perception
 from modules.speech import SpeechModule
 from modules.memory import MemoryModule
 from modules.llm_engine import LLMEngine
+from modules.persona import PersonaModule
 from config.settings import PROXIMITY, EMOTION_GESTURES
 from modules.llm_engine import LLMEngine
 from config.settings import PROXIMITY, EMOTION_GESTURES
@@ -22,6 +23,8 @@ class RobotState(Enum):
     THINKING = auto()
     SPEAKING = auto()
     GESTURE_ONLY = auto()
+    SUPPORT      = auto() # in emotional support conversation
+    GESTURE_ONLY = auto()
 
 class RobotBrain:
     def __init__(self):
@@ -30,7 +33,7 @@ class RobotBrain:
         self.speech = SpeechModule()
         self.memory = MemoryModule()
         self.llm = LLMEngine()
-        self.llm = LLMEngine()
+        self.persona = PersonaModule()
 
         self._running: bool = False
         self._state: RobotState = RobotState.IDLE

@@ -89,3 +89,12 @@ EMOTION_GESTURES = {
     "neutral":   None,
     "disgust":   None,
 }
+
+PERSONA = {
+    "defaults": {
+        "name": "Chappy", # Robot's name - user can change via conversation
+        "personality": "warm", # warm | energetic | calm | witty | nuturing | professional
+        "base_emotion": "happy",
+        "catchphrase": "",
+    }
+}
