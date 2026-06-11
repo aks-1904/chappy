@@ -3,6 +3,7 @@ from typing import Optional
 import logging
 import threading
 import time
+import datetime
 
 from core.serial_bridge import SerialBridge
 from modules.vision import VisionModule, Perception
@@ -10,11 +11,16 @@ from modules.speech import SpeechModule
 from modules.memory import MemoryModule
 from modules.llm_engine import LLMEngine
 from modules.persona import PersonaModule
-from config.settings import PROXIMITY, EMOTION_GESTURES
-from modules.llm_engine import LLMEngine
-from config.settings import PROXIMITY, EMOTION_GESTURES
+from config.settings import PROXIMITY, EMOTION_GESTURES, PERSONA
 
 log = logging.getLogger(__name__)
+
+def get_time_of_day() -> str:
+    h = datetime.now().hour
+    if 5  <= h < 12: return "morning"
+    if 12 <= h < 17: return "afternoon"
+    if 17 <= h < 21: return "evening"
+    return "night"
 
 class RobotState(Enum):
     IDLE = auto()
@@ -97,7 +103,9 @@ class RobotBrain:
     def _greet_user(self, name: str, emotion: str = "neutral"):
         now = time.time()
         last = self._last_greeted.get(name, 0)
-        if now - last < 60: # Don't re-greet within 60 seconds
+
+        cooldown = PERSONA.get("greet_cooldown", 600)
+        if now - last < cooldown:
             return
         
         self._last_greeted[name] = now
@@ -106,27 +114,34 @@ class RobotBrain:
         # Update memory
         self.memory.upsert_user(name)
 
+        # Record emotion
+        emotion = "neutral" # Update with function call (Future Work)
+
         # Check if known user
         user = self.memory.get_user(name)
-        is_known = user and user.get("preferences", {})
+        last_ts = user.get("last_seen", now) if user else now
+        hours_away = (now - last_ts) / 3600
+        tod = get_time_of_day()
 
-        if name == "Guest":
-            greeting = "Hello there! I notices someone nearby. Welcome!"
-        else:
-            greeting = f"Hello {name}! Great to see you. [GESTURE:wave]"
-
-            if is_known:
-                # Adding a personal touch from memory
-                last_seen = user.get("last_seen", now)
-                hours_ago = (now - last_seen) / 3600
-
-                if hours_ago > 8:
-                    greeting = f"Welcome back, {name}! I missed you. [GESTURE:wave]"
+        greeting = self.persona.generate_greeting(
+            person_name = name,
+            emotion = emotion,
+            hours_away = hours_away,
+            time_of_day = tod
+        )
         
         self._set_state(RobotState.GREETING)
         self.serial.gesture("wave")
         self._speak(greeting, emotion)
-        self._set_state(RobotState.IDLE)
+
+        if emotion in ("sad", "fear") and name != "Guest":
+            time.sleep(0.5)
+            self._initiate_support(name, emotion)
+        else:
+            self._set_state(RobotState.IDLE)
+
+    def _initiate_support(name: str, emotion: str):
+        pass
 
     def _get_active_user_from_perception(self, perception: Perception) -> str:
         if perception.known_names:
@@ -139,32 +154,19 @@ class RobotBrain:
             return
         
         self._set_state(RobotState.GESTURE_ONLY)
-        self._speak("Want to shake hands?", "neutral")
-        self.serial.gesture("handshake")
-        self._set_state(RobotState.IDLE)
-        if self.state not in (RobotState.IDLE, RobotState.GREETING):
-            return
-        
-        self._set_state(RobotState.GESTURE_ONLY)
-        self._speak("Want to shake hands?", "neutral")
+
+        nickname = self.persona.get_nickname(self._active_user)
+        self._speak(f"Want to shake hands, {nickname}", "neutral")
         self.serial.gesture("handshake")
         self._set_state(RobotState.IDLE)
 
     def _greet_by_pir(self):
-        time.sleep(1)
-        perception = self.vision.get_perception()
-        name = self._get_active_user_from_perception(perception)
-        self._greet_user(name, perception.dominant_emotion)
-        time.sleep(1)
+        time.sleep(1.0)
         perception = self.vision.get_perception()
         name = self._get_active_user_from_perception(perception)
         self._greet_user(name, perception.dominant_emotion)
 
     def _do_handshake_response(self):
-        self._set_state(RobotState.GESTURE_ONLY)
-        self.serial.gesture("handshake")
-        self._speak("Nice to meet you!", "happy")
-        self._set_state(RobotState.IDLE)
         self._set_state(RobotState.GESTURE_ONLY)
         self.serial.gesture("handshake")
         self._speak("Nice to meet you!", "happy")

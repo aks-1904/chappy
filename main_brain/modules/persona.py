@@ -158,3 +158,72 @@ class PersonaModule:
                     personality=excluded.personality,
                     catchphrase=excluded.catchphrase
             """, (p.name, p.base_emotion, p.personality, p.catchphrase, p.created_at))
+
+    def generate_greeting(
+            self,
+            person_name: str,
+            emotion: str,
+            hours_away: float,
+            time_of_day: str,
+    ) -> str:
+        rel = self.get_relationship(person_name)
+        nickname = rel["nickname"] if rel and rel["nickname"] else person_name
+        love = rel["love_level"] if rel else 3 
+
+        tod_greet = {
+            "morning":   f"Good morning, {nickname}!",
+            "afternoon": f"Good afternoon, {nickname}!",
+            "evening":   f"Good evening, {nickname}!",
+            "night":     f"Hey {nickname}, you're up late!",
+        }.get(time_of_day, f"Hello, {nickname}!")
+
+        # Time-away flavour
+        if hours_away > 24:
+            away_line = f"I really missed you — it's been over a day!"
+        elif hours_away > 8:
+            away_line = f"Been a while! Welcome back."
+        elif hours_away > 3:
+            away_line = f"Good to see you again!"
+        else:
+            away_line = ""
+
+        # Emotion-aware addition
+        if emotion == "sad":
+            emo_line = "You seem a little down... I'm here for you. [GESTURE:comfort_pat]"
+        elif emotion == "happy":
+            emo_line = "You look happy today! That makes me happy too. [GESTURE:happy]"
+        elif emotion == "angry":
+            emo_line = "You seem a bit tense. Take a breath, I'm here. [GESTURE:nod]"
+        else:
+            emo_line = "[GESTURE:wave]"
+
+        # Love-level warmth
+        if love >= 9:
+            warmth = f"I love you, {nickname}."
+        elif love >= 7:
+            warmth = f"So glad you're here!"
+        elif love >= 5:
+            warmth = f"Nice to see you!"
+        else:
+            warmth = "Welcome!"
+
+        parts = [tod_greet]
+        if away_line:
+            parts.append(away_line)
+        parts.append(warmth)
+        parts.append(emo_line)
+
+        return " ".join(parts)
+
+    def get_relationship(self, person_name: str) -> Optional[dict]:
+        with self._conn() as con:
+            row = con.execute(
+                "SELECT * FROM relationships WHERE person_name=?", (person_name,)
+            ).fetchone()
+        return dict(row) if row else None
+
+    def get_nickname(self, person_name: str) -> str:
+        rel = self.get_relationship(person_name)
+        if rel and rel.get("nickname"):
+            return rel["nickname"]
+        return person_name

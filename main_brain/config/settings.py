@@ -96,5 +96,6 @@ PERSONA = {
         "personality": "warm", # warm | energetic | calm | witty | nuturing | professional
         "base_emotion": "happy",
         "catchphrase": "",
-    }
+    },
+    "greet_cooldown": 600 # seconds before re-greeting same person
 }
