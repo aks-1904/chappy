@@ -16,6 +16,20 @@ _DISTRESS_WEIGHTS = {
     "happy":    0.0,
 }
 
+# Emotion sequences that signal a genuine downturn
+_CRISIS_KEYWORDS = [
+    "can't go on", "give up", "no point", "hopeless", "worthless",
+    "nobody cares", "want to die", "end it all", "hurt myself",
+    "don't want to be here", "can't take it", "falling apart",
+]
+
+_SUPPORT_KEYWORDS = [
+    "sad", "upset", "depressed", "lonely", "stressed", "anxious",
+    "scared", "worried", "crying", "hurt", "broken", "lost",
+    "miss", "tired of", "exhausted", "overwhelmed", "nobody understands",
+    "feel alone", "feel like", "i hate", "i can't",
+]
+
 @dataclass
 class EmotionSample:
     emotion: str
@@ -32,6 +46,8 @@ class DistressLevel(Enum):
 
 class EmotionalSupportModule:
     WINDOW_SIZE = 20 # Rolling window
+    CHECKIN_COOLDOWN = 120.0
+    CHECKIN_AFTER = 45.0 # Minimum interval between unsolicited check-ins (seconds)
 
     def __init__(self):
         self._history = dict[str, deque] = {}
@@ -89,6 +105,72 @@ class EmotionalSupportModule:
 
     def mark_checkin(self, person: str):
         self._last_checkin[person] = time.time()
+
+    def increment_support_turns(self, person: str):
+        self._turn_counts[person] = self._turn_counts.get(person, 0) + 1
+
+    def dominant_recent_emotion(self, person: str, window_sec: float = 60) -> str:
+        samples  = list(self._history.get(person, []))
+        now      = time.time()
+        recent   = [s.emotion for s in samples if now - s.timestamp < window_sec]
+        if not recent:
+            return "neutral"
+        return max(set(recent), key=recent.count)
+
+    def record_text(self, person: str, text: str):
+        low = text.lower()
+        if any(k in low for k in _CRISIS_KEYWORDS):
+            self.record_emotion(person, "fear", intensity=1.0)
+            log.warning(f"[Emotion] CRISIS keywords from {person}")
+        elif any(k in low for k in _SUPPORT_KEYWORDS):
+            self.record_emotion(person, "sad", intensity=0.8)
+
+    def is_in_support_mode(self, person: str) -> bool:
+        return self._support_mode.get(person, False)
+
+    def is_recovering(self, person: str) -> bool:
+        samples = list(self._history.get(person, []))
+        if len(samples) < 4:
+            return False
+        
+        older = samples[:-2]
+        recent = samples[-2:]
+        old_score = sum(_DISTRESS_WEIGHTS.get(s.emotion, 0) for s in older) / len(older)
+        new_score = sum(_DISTRESS_WEIGHTS.get(s.emotion, 0) for s in recent) / len(recent)
+
+        return old_score > 0.4 and new_score < 0.15
+
+    def exit_support_mode(self, person: str):
+        self._support_mode[person] = False
+        log.info(f"[Emotion] Support mode OFF for {person}")
+
+    def support_turns(self, person: str) -> int:
+        return self._turn_counts.get(person, 0)
+
+    def should_checkin(self, person: str) -> bool:
+        distress = self.get_distress_level(person)
+        if distress == DistressLevel.NONE:
+            return False
+        if self._support_mode.get(person, False):
+            return False # Already in support mode
+        
+        now = time.time()
+        last = self._last_checkin.get(person, 0)
+        if now - last < self.CHECKIN_COOLDOWN:
+            return False
+        
+        # Check duration of sustained negative emotion
+        samples = list(self._history.get(person, []))
+        if not samples:
+            return False
+        
+        neg = [s for s in samples if _DISTRESS_WEIGHTS.get(e.emotion, 0) > 0]
+        if not neg:
+            return False
+        
+        duration = now - neg[0].timestamp
+
+        return duration >= self.CHECKIN_AFTER
 
     def get_support_prompt_injection(
             self,

@@ -177,7 +177,44 @@ class RobotBrain:
         time.sleep(0.5)
 
     def _run_support_turn(self, person: str, user_text: str, support_injection: str):
-        pass
+        self.support.increment_support_turns(person)
+        nickname = self.persona.get_nickname(person)
+
+        memory_ctx = self.memory.build_context_for_llm(person)
+        system = self.persona.build_system_prompt(
+            active_user=person,
+            memory_context=memory_ctx,
+            user_emotion=self.support.dominant_recent_emotion(person),
+        )
+        system += f"\n\n{support_injection}"
+
+        history = self.memory.to_llm_messages(person)
+
+        self._set_state(RobotState.THINKING)
+        self.serial.thinking_start()
+
+        clean, geatures = self.llm.generate_response(
+            user_input=user_text or f"[Robot is initiating emotional support support for {nickname}]",
+            memory_context="",
+            emotion=self.support.dominant_recent_emotion(person),
+            history=history,
+        )
+
+        self.serial.thinking_stop()
+        self._set_state(RobotState.SUPPORT)
+
+        for g in geatures:
+            self._execute_gesture(g, person)
+
+        # Speak
+        self.serial.speaking_start()
+        self._speak(clean, emotion="sad")
+        self.serial.speaking_stop()
+
+        # Persist data
+        if user_text:
+            self.memory.add_interaction(person, "user", user_text, "sad")
+        self.memory.add_interaction(person, "robot", clean, "neutral")
 
     def _initiate_support(self, person: str, emotion: str):
         self.support.enter_support_mode(person)
@@ -308,7 +345,7 @@ class RobotBrain:
 
     def _smart_hug(self, person: str):
         relation = self.persona.get_relation_label(person)
-        distress = "high"
+        distress = self.support.get_distress_level(person)
 
         # Children / small people -> leg hug
         if relation in ("son", "daughter", "baby", "child", "cousin"):
@@ -320,7 +357,7 @@ class RobotBrain:
             self.serial.hug_waist()
 
         # Crisis / reaching up for tall person bending down
-        elif distress in ("high", "crisis"):
+        elif distress in (DistressLevel.HIGH, DistressLevel.CRISIS):
             self.serial.hug_reach()
 
         # Default: waist hug (most versatile)
@@ -347,7 +384,27 @@ class RobotBrain:
             self.serial.gesture(name)
 
     def _check_emotion_and_act(self, person: str, text: str, emotion: str):
-        pass
+        self.support.record_text(person, text)
+        self.support.record_emotion(
+            person,
+            emotion,
+            intensity=0.6
+        )
+
+        distress = self.support.get_distress_level(person)
+
+        # Escalate to support mode
+        if(distress.value >= DistressLevel.MODERATE.value and not self.support.is_in_support_mode(person)):
+            log.info(f"[Robot Brain] Escalating to support mode for {person} (distress={distress.name})")
+            self.support.enter_support_mode(person)
+
+        if self.support.is_in_support_mode(person) and self.support.is_recovering(person):
+            self.support.exit_support_mode(person)
+            nickname = self.persona.get_nickname(person)
+            self._speak(
+                f"You seem like you're feeling a bit better, {nickname}. "
+                f"I'm really glad. [GESTURE:nod]",
+                emotion="happy")
 
     def _conversation_turn(self, user_text: str):
         if not user_text.strip():
@@ -366,8 +423,6 @@ class RobotBrain:
         if update_response:
             clean, gestures = LLMEngine.extract_gestures_static(update_response)
 
-            # Emit persona update events
-            p_name = self.persona.persona.name
             for g in gestures:
                 self._execute_gesture(g, person)
 
@@ -386,6 +441,22 @@ class RobotBrain:
             user_emotion="neutral",
             robot_emotion=self.persona.persona.base_emotion,
         )
+
+        # Inject support prompt if in support mode
+        if self.support.is_in_support_mode(person):
+            distress = self.support.get_distress_level(person)
+            turn = self.support.support_turns(person)
+            injection = self.support.get_support_prompt_injection(
+                person = person,
+                nickname=self.persona.get_nickname(person),
+                distress=distress,
+                turn=turn,
+                relation=self.persona.get_relation_label(person),
+            )
+            if injection:
+                system += f"\n\n{injection}"
+
+            self.support.increment_support_turns(person)
 
         # Thinking
         self._set_state(RobotState.THINKING)
@@ -424,13 +495,14 @@ class RobotBrain:
         if time.time() - self._last_proactive_check < interval:
             return
         
-        self._last_proactive_check = time.time()
-        log.info(f"[Robot Brain] Proactive check-in for {person}")
-        threading.Thread(
-            target=self._initiate_support,
-            args=(person, "neutral"),
-            daemon=True
-        ).start()
+        if self.support.should_checkin(person):
+            self._last_proactive_check = time.time()
+            log.info(f"[Robot Brain] Proactive check-in for {person}")
+            threading.Thread(
+                target=self._initiate_support,
+                args=(person, "neutral"),
+                daemon=True
+            ).start()
 
     def _get_name(self, perception: Perception) -> str:
         return perception.known_names[0] if perception.known_names else "Guest"
@@ -444,8 +516,7 @@ class RobotBrain:
         perception = self.vision.get_perception()
         person = self._get_name(perception)
         if person != "Guest":
-            # Recording emotion
-            pass
+            self.support.record_emotion(person, perception.dominant_emotion, intensity=0.5)
 
     def _main_loop(self):
         self.speech.start_listening_thread() # Start listening thread - pushes to SpeechModule queue
