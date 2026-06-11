@@ -11,6 +11,7 @@ from modules.speech import SpeechModule
 from modules.memory import MemoryModule
 from modules.llm_engine import LLMEngine
 from modules.persona import PersonaModule
+from modules.emotional_support import EmotionalSupportModule, DistressLevel
 from config.settings import PROXIMITY, EMOTION_GESTURES, PERSONA
 
 log = logging.getLogger(__name__)
@@ -40,6 +41,7 @@ class RobotBrain:
         self.memory = MemoryModule()
         self.llm = LLMEngine()
         self.persona = PersonaModule()
+        self.support = EmotionalSupportModule()
 
         self._running: bool = False
         self._state: RobotState = RobotState.IDLE
@@ -81,7 +83,9 @@ class RobotBrain:
 
         self._running = True
         self._main_thread = threading.Thread(
-            target=self._main_loop, name="BrainLoop", daemon=True
+            target=self._main_loop, 
+            name="BrainLoop", 
+            daemon=True
         )
         self._main_thread.start()
 
@@ -117,7 +121,7 @@ class RobotBrain:
         self.memory.upsert_user(name)
 
         # Record emotion
-        emotion = "neutral" # Update with function call (Future Work)
+        self.support.record_emotion(name, emotion)
 
         # Check if known user
         user = self.memory.get_user(name)
@@ -142,8 +146,63 @@ class RobotBrain:
         else:
             self._set_state(RobotState.IDLE)
 
-    def _initiate_support(name: str, emotion: str):
+    def _offer_hug(self, person: str, distress: DistressLevel):
+        nickname = self.persona.get_nickname(person)
+        relation = self.persona.get_relation_label(person)
+
+        # Choose hug type
+        if distress == DistressLevel.CRISIS:
+            self._speak(f"Come here, {nickname}. I've got you. [GESTURE:hug_reach]", emotion="sad")
+            self.serial.hug_reach()
+
+        elif distress == DistressLevel.HIGH:
+            if relation in ("son", "daughter", "baby", "child"):
+                self._speak(f"Let me give you a hug, {nickname}. [GESTURE:hug_leg]", emotion="sad")
+                self.serial.hug_leg()
+            else:
+                self._speak(
+                    f"I'm here for you, {nickname}. [GESTURE:hug_waist]",
+                    emotion="sad"
+                )
+                self.serial.hug_waist()
+
+        elif distress == DistressLevel.MODERATE:
+            self._speak(
+                f"Hey, I noticed you seem a little down. [GESTURE:comfort_pat]",
+                emotion="neutral"
+            )
+            self.serial.comfort_pat()
+
+        # Let gesture finish before speaking more
+        time.sleep(0.5)
+
+    def _run_support_turn(self, person: str, user_text: str, support_injection: str):
         pass
+
+    def _initiate_support(self, person: str, emotion: str):
+        self.support.enter_support_mode(person)
+        self._set_state(RobotState.SUPPORT)
+        self.support.mark_checkin(person)
+
+        distress = self.support.get_distress_level(person)
+        nickname = self.persona.get_nickname(person)
+
+        # Decide on physical comfort gesture immediately
+        hug_threshold = PERSONA.get("hug_offer_distress_level", 2)
+        if distress.value >= hug_threshold:
+            self._offer_hug(person, distress)
+        else:
+            self.serial.comfort_pat()
+
+        # Generate empathetic opening via LLM
+        support_injection = self.support.get_support_prompt_injection(
+            person=person,
+            nickname=nickname,
+            distress=distress,
+            turn=0,
+            relation=self.persona.get_relation_label(person)
+        )
+        self._run_support_turn(person, "", support_injection)
 
     def _get_active_user_from_perception(self, perception: Perception) -> str:
         if perception.known_names:
@@ -165,15 +224,14 @@ class RobotBrain:
     def _greet_by_pir(self):
         time.sleep(1.0)
         perception = self.vision.get_perception()
-        name = self._get_active_user_from_perception(perception)
-        self._greet_user(name, perception.dominant_emotion)
+        self._greet_user(self._get_name(perception), perception.dominant_emotion)
 
     def _handle_touch(self):
         person = self._active_user
-        distress = "moderate"
+        distress = self.support.get_distress_level(person)
 
         self._set_state(RobotState.GESTURE_ONLY)
-        if distress in ("moderate", "high", "crisis"):
+        if distress in (DistressLevel.MODERATE, DistressLevel.HIGH, DistressLevel.CRISIS):
             self.serial.comfort_pat()
             nickname = self.persona.get_nickname(person)
             self._speak(f"I'm right here, {nickname}. You're not alone.", "sad")
