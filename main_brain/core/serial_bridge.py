@@ -67,6 +67,9 @@ class SerialBridge:
     
     def neutral(self):
         self.send("neutral")
+
+    def comfort_pat(self,  on_done: Optional[Callable] = None): 
+        self.gesture("comfort_pat", on_done)
     
     def send(self, cmd: str, payload: Optional[dict] = None) -> bool:
         if not self._connected:

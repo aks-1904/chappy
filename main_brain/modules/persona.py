@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from contextlib import contextmanager
 import time
 import sqlite3
+import re
 
 from config.settings import MEMORY, PERSONA
 
@@ -214,6 +215,169 @@ class PersonaModule:
         parts.append(emo_line)
 
         return " ".join(parts)
+
+    @property
+    def persona(self) -> RobotPersona:
+        return self._persona
+    
+    _NAME_PATTERNS = ["your name is", "call yourself", "you are called", "i'll call you"]
+    _PERSONA_PATTERNS  = ["be more", "be a", "act like", "your personality is", "you should be"]
+
+    def build_system_prompt(
+            self,
+            active_user: str,
+            memory_context: str = "",
+            user_emotion: str = "neutral",
+            robot_emotion: str = "",
+    ) -> str:
+        pass
+
+    def update_name(self, name: str):
+        self._persona.name = name.strip().title()
+        self._save_persona(self._persona)
+        log.info(f"[Persona] Name changed to '{self._persona.name}'")
+
+    def update_personality(self, archetype: str):
+        key = archetype.lower().strip()
+        if key not in ARCHETYPES:
+            # find closest
+            for k in ARCHETYPES:
+                if k.startswith(key[:3]):
+                    key = k
+                    break
+        
+        self._persona.personality = key
+        self._save_persona(self._persona)
+        log.info(f"[Persona] Personality changed to '{key}'")
+
+    def set_relationship(
+            self,
+            person_name: str,
+            relation: str,
+            nickname: str = "",
+            notes: str = "",
+            love_level: int = 5
+    ):
+        relation = relation.lower().strip()
+        with self._conn() as con:
+            con.execute("""
+                INSERT INTO relationships(person_name, relation, nickname, notes, love_level, updated_at)
+                VALUES(?, ?, ?, ?, ?, ?)
+                ON CONFLICT(person_name) DO UPDATE SET
+                    relation=excluded.relation,
+                    nickname=excluded.nickname,
+                    notes=excluded.notes,
+                    love_level=excluded.love_level,
+                    updated_at=excluded.updated_at
+            """, (person_name, relation, nickname, notes, love_level, time.time()))
+
+            log.info(f"[Persona] Relationship: {person_name} → {relation} (love:{love_level})")
+
+    def _parse_relationship(self, text: str, speaker: str) -> Optional[tuple[str, str, str]]:
+        low = text.lower()
+
+        all_relations = list(RELATIONSHIP_TONES.keys())
+
+        # Pattern: "[Name] is my [relation]"
+        m = re.search(
+            r'(\w+)\s+is\s+my\s+(' + '|'.join(all_relations) + r')', low
+        )
+        if m:
+            name     = text.split()[m.start()// len(text[0])].strip() if False else m.group(1).title()
+            relation = m.group(2)
+            return name, relation, name
+        
+        # Pattern: "my [relation] is [Name]" or "my [relation]'s name is [Name]"
+        m = re.search(
+            r'my\s+(' + '|'.join(all_relations) + r')(?:\'s name)?\s+is\s+(\w+)', low
+        )
+        if m:
+            relation = m.group(1)
+            name     = m.group(2).title()
+            return name, relation, name
+        
+        # Pattern: "I am your [relation]" (speaker talking about themselves)
+        m = re.search(
+            r'i\s+am\s+your\s+(' + '|'.join(all_relations) + r')', low
+        )
+        if m:
+            return speaker, m.group(1), speaker
+        
+        # Pattern: "treat [Name] as my [relation]" / "treat [Name] like my [relation]"
+        m = re.search(
+            r'treat\s+(\w+)\s+(?:as|like)\s+(?:my\s+)?(' + '|'.join(all_relations) + r')', low
+        )
+        if m:
+            name     = m.group(1).title()
+            relation = m.group(2)
+            return name, relation, name
+
+        return None
+
+    def try_parse_persona_update(self, text: str, speaker: str) -> Optional[str]:
+        low = text.lower().strip()
+
+        # Robot name
+        for pat in self._NAME_PATTERNS:
+            if pat in low:
+                idx = low.index(pat) + len(pat)
+                name = text[idx:].strip().split()[0].strip(".,!?")
+                self.update_name(name)
+
+                return f"Got it! I'll call myself {self._persona.name} from now on. [GESTURE:happy]"
+            
+        # Personality update
+        for pat in self._PERSONA_PATTERS:
+            if pat in low:
+                remainder = low.split(pat)[-1].strip()
+                for key in ARCHETYPES:
+                    self.update_personality(key)
+                    return f"Sure, I'll be more {key} from now on! [GESTURE:nod]"
+                
+        for "call me" in low:
+            idx = low.index("call me ") + 8
+            nickname = text[idx:].strip().split()[0].strip(".,!?")
+            rel = self.get_relationship(speaker) or {}
+            self.set_relationship(
+                speaker,
+                rel.get("relation", "friend"),
+                nickname=nickname,
+                love_level=rel.get("love_level", 5),
+            )
+
+        result = self._parse_relationship(text, speaker)
+        if result:
+            person, relation, nickname = result
+            # Assign love_level by relationship type
+            love_map = {
+                "owner": 10, "father": 9, "mother": 9, "son": 9, "daughter": 9,
+                "grandfather": 9, "grandmother": 9,
+                "brother": 8, "sister": 8, "best friend": 8,
+                "uncle": 7, "aunt": 7, "cousin": 6,
+                "friend": 6, "colleague": 4, "guest": 3,
+            }
+            love = love_map.get(relation, 5)
+            self.set_relationship(
+                person_name = person,
+                relation    = relation,
+                nickname    = nickname or person,
+                love_level  = love,
+            )
+            return (
+                f"I understand! I'll treat {person} as your {relation} "
+                f"and show them the love they deserve. [GESTURE:nod]"
+            )
+        
+        # Catchphrase Update
+        if "your catchphrase" in low or "always say" in low:
+            # Extract quoted phrase
+            m = re.search(r'["\'](.+?)["\']', text)
+            if m:
+                self.update_catchphrase(m.group(1))
+                return f"I'll use that as my catchphrase! [GESTURE:happy]"
+
+        return None   # Not a persona update
+
 
     def get_relationship(self, person_name: str) -> Optional[dict]:
         with self._conn() as con:

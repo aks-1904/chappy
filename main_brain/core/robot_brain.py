@@ -166,10 +166,19 @@ class RobotBrain:
         name = self._get_active_user_from_perception(perception)
         self._greet_user(name, perception.dominant_emotion)
 
-    def _do_handshake_response(self):
+    def _handle_touch(self):
+        person = self._active_user
+        distress = "moderate"
+
         self._set_state(RobotState.GESTURE_ONLY)
-        self.serial.gesture("handshake")
-        self._speak("Nice to meet you!", "happy")
+        if distress in ("moderate", "high", "crisis"):
+            self.serial.comfort_pat()
+            nickname = self.persona.get_nickname(person)
+            self._speak(f"I'm right here, {nickname}. You're not alone.", "sad")
+        else:
+            self.serial.gesture("handshake")
+            nickname = self.persona.get_nickname(person)
+            self._speak(f"Good to feel you here, {nickname}!", "happy")
         self._set_state(RobotState.IDLE)
 
     def _handle_serial_events(self):
@@ -214,7 +223,7 @@ class RobotBrain:
                 log.info("[Brain] Touch sensor activated")
                 if self.state in (RobotState.IDLE, RobotState.GREETING):
                     threading.Thread(
-                        target=self._do_handshake_response,
+                        target=self._handle_touch,
                         daemon=True
                     ).start()
 
@@ -236,10 +245,17 @@ class RobotBrain:
             msg = f"Reminder for {user}: {r['text']}"
             self._speak(msg, emotion="neutral")
 
+    def _execute_gesture(self, gesture_name: str, person: str = "Guest"):
+        pass
+
+    def _check_emotion_and_act(self, person: str, text: str, emotion: str):
+        pass
+
     def _conversation_turn(self, user_text: str):
         if not user_text.strip():
             return
         
+        person = self._active_user
         perception = self.vision.get_perception()
         emotion = perception.dominant_emotion
 
@@ -247,45 +263,56 @@ class RobotBrain:
         self.memory.upsert_user(self._active_user)
         self.memory.add_interaction(self._active_user, "user", user_text, emotion)
 
-        # Thinking State
+        # Check for persona update intent
+        update_response = self.persona.try_parse_persona_update(user_text, person)
+        if update_response:
+            clean, gestures = LLMEngine.extract_gesture(update_response)
+
+            # Emit persona update events
+            p_name = self.persona.persona.name
+            for g in gestures:
+                self._execute_gesture(g, person)
+
+            self._speak(clean, emotion="happy")
+            self.memory.add_interaction(person, "robot", clean, "neutral")
+
+        # Emotion tracking
+        self._check_emotion_and_act(person, user_text, emotion)
+
+        # Build system prompt with persona + relationships
+        memory_ctx = self.memory.build_context_for_llm(person)
+        history = self.memory.to_llm_messages(person)
+        system = self.persona.build_system_prompt(
+            active_user=person,
+            memory_context=memory_ctx,
+            user_emotion="neutral",
+            robot_emotion=self.persona.persona.base_emotion,
+        )
+
+        # Thinking
         self._set_state(RobotState.THINKING)
         self.serial.thinking_start()
 
-        # LLM call
-        memory_ctx = self.memory.build_context_for_llm(self._active_user)
-        history = self.memory.to_llm_messages(self._active_user)
+        # Agents Tasks
 
-        clean_response, gestures = self.llm.generate_response(
-            user_input=user_text,
-            memory_context=memory_ctx,
-            emotion=emotion,
-            history=history,
-        )
-
-        # Stop thinking
         self.serial.thinking_stop()
         self._set_state(RobotState.SPEAKING)
 
-        # Execute first gesture (non-blocking, fires while speaking)
-        if gestures:
-            self.serial.gesture(gestures[0])
-        # Also map emotion to gesture if no explicit gesture
-        elif emotion != "neutral":
-            emotion_gesture = EMOTION_GESTURES.get(emotion)
-            if emotion_gesture:
-                gesture_name = emotion_gesture.replace("gesture_", "")
-                self.serial.gesture(gesture_name)
+        # Execute gestures
+        for g in gestures:
+            self._execute_gesture(g, person)
 
-        # Speak
+            # Fallback emotion gesture if none from LLM
+        if not gestures and emotion != "neutral":
+            mapped = EMOTION_GESTURES.get(emotion)
+            if mapped:
+                self._execute_gesture(mapped.replace("gesture_", ""), person)
+
         self.serial.speaking_start()
-        self._speak(clean_response, emotion)
+        self._speak(clean, emotion="neutral")
         self.serial.speaking_stop()
 
-        # Save robot response
-        self.memory.add_interaction(
-            self._active_user, "robot", clean_response, "neutral"
-        )
-
+        self.memory.add_interaction(person, "robot", clean, "neutral")
         self._set_state(RobotState.IDLE)
 
     def _main_loop(self):

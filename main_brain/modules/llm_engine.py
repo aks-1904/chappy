@@ -74,6 +74,10 @@ class LLMEngine:
 
         return clean, [g.lower() for g in gestures]
 
+    @staticmethod
+    def extract_gestures_static(text: str) -> tuple[str, list[str]]:
+        return LLMEngine.extract_gesture(text)
+
     def generate_response(
             self,
             user_input: str,
@@ -150,4 +154,3 @@ class LLMEngine:
 
         messages.append({"role": "user", "content": user_input})
         return messages
-
