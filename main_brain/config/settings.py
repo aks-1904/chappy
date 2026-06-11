@@ -97,5 +97,7 @@ PERSONA = {
         "base_emotion": "happy",
         "catchphrase": "",
     },
-    "greet_cooldown": 600 # seconds before re-greeting same person
+    "greet_cooldown": 600, # seconds before re-greeting same person
+    "mood_log_interval": 60,    # seconds between background mood snapshots
+    "proactive_checkin_interval": 300,   # seconds between unsolicited wellness checks
 }

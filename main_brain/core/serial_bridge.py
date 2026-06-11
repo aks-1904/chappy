@@ -68,7 +68,16 @@ class SerialBridge:
     def neutral(self):
         self.send("neutral")
 
-    def comfort_pat(self,  on_done: Optional[Callable] = None): 
+    def hug_leg(self, on_done: Optional[Callable] = None):
+        self.gesture("hug_leg", on_done)
+
+    def hug_waist(self, on_done: Optional[Callable] = None):
+        self.gesture("hug_waist", on_done)
+
+    def hug_reach(self, on_done: Optional[Callable] = None):
+        self.gesture("hug_reach", on_done)
+
+    def comfort_pat(self, on_done: Optional[Callable] = None): 
         self.gesture("comfort_pat", on_done)
     
     def send(self, cmd: str, payload: Optional[dict] = None) -> bool:

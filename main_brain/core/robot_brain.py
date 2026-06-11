@@ -49,6 +49,8 @@ class RobotBrain:
         self._last_greeted: dict = {} # name -> timestamp
         self._active_user: str = "Guest"
 
+        self._last_proactive_check: float = 0.0
+
     # State helpers
     def _set_state(self, new_state: RobotState):
         with self._state_lock:
@@ -233,7 +235,6 @@ class RobotBrain:
     def _speak(self, text: str, emotion: str = "neutral"):
         log.info(f"[Robot Brain] Speaking ({emotion}): {text!r}")
         self.speech.speak(text, emotion=emotion, blocking=True)
-        self.speech.speak(text, emotion=emotion, blocking=True)
     
     def _check_reminders(self):
         reminders = self.memory.get_due_reminders()
@@ -242,11 +243,50 @@ class RobotBrain:
             log.info(f"[Robot Brain] Reminder due: {r['text']}")
             self.memory.mark_reminder_done(r['id'])
             user = r['user_name']
+            nickname = self.persona.get_nickname(user)
+            msg = f"Hey {nickname}, just a reminder: {r['text']}"
             msg = f"Reminder for {user}: {r['text']}"
             self._speak(msg, emotion="neutral")
 
+    def _smart_hug(self, person: str):
+        relation = self.persona.get_relation_label(person)
+        distress = "high"
+
+        # Children / small people -> leg hug
+        if relation in ("son", "daughter", "baby", "child", "cousin"):
+            self.serial.hug_leg()
+
+        # Seated or mid-height contact
+        elif relation in ("grandfather", "grandmother", "elder"):
+            # Elderly often seated -> waist hug
+            self.serial.hug_waist()
+
+        # Crisis / reaching up for tall person bending down
+        elif distress in ("high", "crisis"):
+            self.serial.hug_reach()
+
+        # Default: waist hug (most versatile)
+        else:
+            self.serial.hug_waist()
+
     def _execute_gesture(self, gesture_name: str, person: str = "Guest"):
-        pass
+        name = gesture_name.lower().strip()
+
+        # Smart hug routing
+        if name == "hug":
+            self._smart_hug(person)
+            return
+        
+        if name in ("hug_leg", "hug_waist", "hug_reach", "comfort_pat"):
+            self.serial.gesture(name)
+            return
+        
+        # Standard gestures
+        VALID = {
+            "wave", "handshake", "nod", "shake", "happy", "sad", "surprised", "point",
+        }
+        if name in VALID:
+            self.serial.gesture(name)
 
     def _check_emotion_and_act(self, person: str, text: str, emotion: str):
         pass
@@ -266,7 +306,7 @@ class RobotBrain:
         # Check for persona update intent
         update_response = self.persona.try_parse_persona_update(user_text, person)
         if update_response:
-            clean, gestures = LLMEngine.extract_gesture(update_response)
+            clean, gestures = LLMEngine.extract_gestures_static(update_response)
 
             # Emit persona update events
             p_name = self.persona.persona.name
@@ -315,6 +355,40 @@ class RobotBrain:
         self.memory.add_interaction(person, "robot", clean, "neutral")
         self._set_state(RobotState.IDLE)
 
+    def _proactive_checkin(self):
+        person = self._active_user
+        if person == "Guest":
+            return
+        if self.state != RobotState.IDLE:
+            return
+        
+        interval = PERSONA.get("proactive_checkin_interval", 300)
+        if time.time() - self._last_proactive_check < interval:
+            return
+        
+        self._last_proactive_check = time.time()
+        log.info(f"[Robot Brain] Proactive check-in for {person}")
+        threading.Thread(
+            target=self._initiate_support,
+            args=(person, "neutral"),
+            daemon=True
+        ).start()
+
+    def _get_name(self, perception: Perception) -> str:
+        return perception.known_names[0] if perception.known_names else "Guest"
+
+    def _log_background_emotion(self):
+        interval = PERSONA.get("mood_log_interval", 60)
+        if time.time() - getattr(self, "_last_mood_log", 0) < interval:
+            return
+        
+        self._last_mood_log = time.time()
+        perception = self.vision.get_perception()
+        person = self._get_name(perception)
+        if person != "Guest":
+            # Recording emotion
+            pass
+
     def _main_loop(self):
         self.speech.start_listening_thread() # Start listening thread - pushes to SpeechModule queue
 
@@ -327,6 +401,9 @@ class RobotBrain:
                 self._check_reminders()
                 last_reminder_check = time.time()
 
+            # AUtonomous emotional chack-in
+            self._proactive_checkin()
+
             # Handle spoken input
             if self.state == RobotState.IDLE:
                 text = self.speech.get_transcription()
@@ -337,5 +414,7 @@ class RobotBrain:
                         args=(text,),
                         daemon=True,
                     ).start()
+
+            self._log_background_emotion()
             
             time.sleep(0.05)

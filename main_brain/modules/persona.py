@@ -237,6 +237,10 @@ class PersonaModule:
         self._save_persona(self._persona)
         log.info(f"[Persona] Name changed to '{self._persona.name}'")
 
+    def get_relation_label(self, person_name: str) -> str:
+        rel = self.get_relationship(person_name)
+        return rel['relation'] if rel else "guest"
+
     def update_personality(self, archetype: str):
         key = archetype.lower().strip()
         if key not in ARCHETYPES:
