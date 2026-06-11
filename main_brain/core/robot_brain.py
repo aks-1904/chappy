@@ -12,6 +12,7 @@ from modules.memory import MemoryModule
 from modules.llm_engine import LLMEngine
 from modules.persona import PersonaModule
 from modules.emotional_support import EmotionalSupportModule, DistressLevel
+from modules.agent_runner import AgentRunner
 from config.settings import PROXIMITY, EMOTION_GESTURES, PERSONA
 
 log = logging.getLogger(__name__)
@@ -42,6 +43,7 @@ class RobotBrain:
         self.llm = LLMEngine()
         self.persona = PersonaModule()
         self.support = EmotionalSupportModule()
+        self.agent = AgentRunner(memory_ref=self.memory)
 
         self._running: bool = False
         self._state: RobotState = RobotState.IDLE
@@ -462,7 +464,32 @@ class RobotBrain:
         self._set_state(RobotState.THINKING)
         self.serial.thinking_start()
 
-        # Agents Tasks
+        # Agents tools
+        if self.agent.needs_tools(user_text):
+            clean, gestures = self.agent.run(
+                user_input=user_text,
+                system_prompt=system,
+                history=history,
+                emotion=emotion,
+                active_user=person,
+            )
+        else:
+            clean, gestures = self.llm.generate_response(
+                user_input=user_text,
+                memory_context="",
+                emotion=emotion,
+                history=history,
+            )
+
+            # Re-build with system (generate_response doesn't take system yet)
+            if not clean:
+                clean, gestures = self.agent.run(
+                    user_input=user_text,
+                    system_prompt=system,
+                    history=history,
+                    emotion=emotion,
+                    active_user=person
+                )
 
         self.serial.thinking_stop()
         self._set_state(RobotState.SPEAKING)
