@@ -78,6 +78,11 @@ void updateThinkingAnimation();
 // Gestures
 void gestureWave();
 void gestureHandshake();
+void gestureNod();
+void gestureShake();
+void gestureHappy();
+void gestureSad();
+void gestureSurprised();
 void moveServoSlow(Servo &, int, int, int)
 
     void setup()
@@ -128,6 +133,7 @@ void moveServoSlow(Servo &s, int from, int to, int stepDelayMs)
     s.write(to);
 }
 
+// Wave right arm
 void gestureWave()
 {
     moveServoSlow(rightArm, RIGHT_ARM_NEUTRAL, 90, 8);
@@ -142,10 +148,11 @@ void gestureWave()
     robotState = STATE_IDLE;
 
     digitalWrite(LED_PIN, LOW);
-    
+
     sendEvent("gesture_done", "{\"gesture\":\"wave\"}");
 }
 
+// Extend right arm for handshake, then retract
 void gestureHandshake()
 {
     moveServoSlow(rightArm, RIGHT_ARM_NEUTRAL, 90, 6);
@@ -164,6 +171,89 @@ void gestureHandshake()
     sendEvent("gesture_done", "{\"gesture\":\"handshake\"}");
 }
 
+// Nod head up-down (agreement)
+void gestureNod()
+{
+    for (int i = 0; i < 2; i++)
+    {
+        moveServoSlow(headTilt, HEAD_TILT_NEUTRAL, HEAD_TILT_NEUTRAL - 20, 5);
+        moveServoSlow(headTilt, HEAD_TILT_NEUTRAL - 20, HEAD_TILT_NEUTRAL + 10, 5);
+        moveServoSlow(headTilt, HEAD_TILT_NEUTRAL + 10, HEAD_TILT_NEUTRAL, 5);
+    }
+    setNeutral();
+    robotState = STATE_IDLE;
+    digitalWrite(LED_PIN, LOW);
+    sendEvent("gesture_done", "{\"gesture\":\"nod\"}");
+}
+
+// Head shake left-right (disagreement / no)
+void gestureShake()
+{
+    for (int i = 0; i < 2; i++)
+    {
+        moveServoSlow(headPan, HEAD_PAN_NEUTRAL, HEAD_PAN_NEUTRAL - 25, 5);
+        moveServoSlow(headPan, HEAD_PAN_NEUTRAL - 25, HEAD_PAN_NEUTRAL + 25, 5);
+        moveServoSlow(headPan, HEAD_PAN_NEUTRAL + 25, HEAD_PAN_NEUTRAL, 5);
+    }
+    setNeutral();
+    robotState = STATE_IDLE;
+    digitalWrite(LED_PIN, LOW);
+    sendEvent("gesture_done", "{\"gesture\":\"shake\"}");
+}
+
+// Happy: both arms up + head tilt
+void gestureHappy()
+{
+    moveServoSlow(leftArm, LEFT_ARM_NEUTRAL, 90, 6);
+    moveServoSlow(rightArm, RIGHT_ARM_NEUTRAL, 90, 6);
+    headTilt.write(HEAD_TILT_NEUTRAL - 15);
+    delay(700);
+
+    // Celebrate bounce
+    for (int i = 0; i < 2; i++)
+    {
+        leftArm.write(70);
+        rightArm.write(110);
+        delay(200);
+        leftArm.write(90);
+        rightArm.write(90);
+        delay(200);
+    }
+
+    delay(300);
+    moveServoSlow(leftArm, 90, LEFT_ARM_NEUTRAL, 6);
+    moveServoSlow(rightArm, 90, RIGHT_ARM_NEUTRAL, 6);
+
+    setNeutral();
+    robotState = STATE_IDLE;
+
+    digitalWrite(LED_PIN, LOW);
+    sendEvent("gesture_done", "{\"gesture\":\"happy\"}");
+}
+
+// Sad: arms droop, head tilts down
+void gestureSad() {
+  moveServoSlow(headTilt, HEAD_TILT_NEUTRAL, HEAD_TILT_NEUTRAL + 20, 5);
+  delay(1200);
+  moveServoSlow(headTilt, HEAD_TILT_NEUTRAL + 20, HEAD_TILT_NEUTRAL, 5);
+  setNeutral(); robotState = STATE_IDLE;
+  digitalWrite(LED_PIN, LOW);
+  sendEvent("gesture_done", "{\"gesture\":\"sad\"}");
+}
+
+// Surprised: head snaps up, arms fling up
+void gestureSurprised() {
+  headTilt.write(HEAD_TILT_NEUTRAL - 30);
+  leftArm.write(90);
+  rightArm.write(90);
+  delay(600);
+  headTilt.write(HEAD_TILT_NEUTRAL);
+  moveServoSlow(leftArm,  90, LEFT_ARM_NEUTRAL,  8);
+  moveServoSlow(rightArm, 90, RIGHT_ARM_NEUTRAL, 8);
+  setNeutral(); robotState = STATE_IDLE;
+  digitalWrite(LED_PIN, LOW);
+  sendEvent("gesture_done", "{\"gesture\":\"surprised\"}");
+}
 void updateThinkingAnimation()
 {
     if (robotState != STATE_THINKING)
@@ -276,7 +366,7 @@ void readSerial()
     }
 
     const char *cmd = inDoc["cmd"] | "";
-    handleCommand(cmd); // To be implement later
+    handleCommand(cmd);
 }
 
 // State Helpers
