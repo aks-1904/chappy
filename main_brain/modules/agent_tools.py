@@ -6,6 +6,8 @@ from html.parser import HTMLParser
 import re
 import time
 from datetime import datetime
+import urllib.parse
+import math
 
 log = logging.getLogger(__name__)
 
@@ -153,6 +155,58 @@ def _set_reminder_tool(
         )
     return ToolResult(False, "Reminder system unavailable.")
 
+def _wikipedia_lookup(topic: str) -> ToolResult:
+    try:
+        encoded = urllib.parse.quote(topic.replace(" ", "_"))
+        url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{encoded}"
+        r = requests.get(url, timeout=8,
+                         headers={"User-Agent": "CompanionRobot/1.0"})
+        if r.status_code == 200:
+            data = r.json()
+            extract = data.get("extract", "")
+            title   = data.get("title", topic)
+            if extract:
+                # Keep first 3 sentences
+                sentences = extract.split(". ")[:3]
+                summary = ". ".join(sentences).strip()
+                return ToolResult(
+                    success=True,
+                    output=f"{title}: {summary}",
+                    data=data,
+                )
+        return ToolResult(False, f"Wikipedia page not found for '{topic}'")
+    except Exception as e:
+        return ToolResult(False, f"Wikipedia error: {e}")
+
+def _calculate(expression: str) -> ToolResult:
+    """Safely evaluate a math expression."""
+    # Whitelist: only safe math operations
+    allowed = set("0123456789+-*/().%, ")
+    allowed.update(["*", "/", "//", "**"])
+    clean = expression.replace("^", "**")   # ^ → ** for power
+
+    # Allow math functions by replacing names
+    safe_names = {
+        "sqrt": math.sqrt, "log": math.log, "log10": math.log10,
+        "sin": math.sin, "cos": math.cos, "tan": math.tan,
+        "abs": abs, "round": round, "pi": math.pi, "e": math.e,
+        "pow": pow, "floor": math.floor, "ceil": math.ceil,
+    }
+    try:
+        result = eval(clean, {"__builtins__": {}}, safe_names)   # noqa: S307
+        return ToolResult(
+            success=True,
+            output=f"{expression} = {result}",
+            data=result,
+        )
+    except Exception as e:
+        return ToolResult(False, f"Could not calculate '{expression}': {e}")
+    
+def _get_time_date(timezone: str = "local") -> ToolResult:
+    now = datetime.now()
+    result = now.strftime("Today is %A, %B %d %Y. The time is %I:%M %p.")
+    return ToolResult(success=True, output=result, data=now.isoformat())
+
 WEB_SEARCH_TOOL = ToolDefinition(
     name="web_search",
     description=(
@@ -186,6 +240,50 @@ REMINDER_TOOL = ToolDefinition(
         "required": ["person", "text", "when"],
     },
     fn=_set_reminder_tool,
+)
+
+WIKIPEDIA_TOOL = ToolDefinition(
+    name="wikipedia_lookup",
+    description=(
+        "Look up factual information about a person, place, concept, or event "
+        "from Wikipedia. Good for definitions, history, and general knowledge."
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "topic": {"type": "string", "description": "Topic to look up"},
+        },
+        "required": ["topic"],
+    },
+    fn=_wikipedia_lookup,
+)
+
+CALCULATE_TOOL = ToolDefinition(
+    name="calculate",
+    description=(
+        "Evaluate a mathematical expression. Supports +, -, *, /, **, sqrt(), "
+        "sin(), cos(), log(), pi, e, etc."
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "expression": {"type": "string", "description": "Math expression, e.g. '2 * pi * 5'"},
+        },
+        "required": ["expression"],
+    },
+    fn=_calculate,
+)
+
+TIME_DATE_TOOL = ToolDefinition(
+    name="get_time_date",
+    description="Get the current date and time.",
+    parameters={
+        "type": "object",
+        "properties": {
+            "timezone": {"type": "string", "description": "Timezone (default: local)", "default": "local"},
+        },
+    },
+    fn=_get_time_date,
 )
 
 class ToolRegistry:
@@ -222,5 +320,8 @@ def build_default_registery() -> ToolRegistry:
     registry = ToolRegistry()
     registry.register(WEB_SEARCH_TOOL)
     registry.register(REMINDER_TOOL)
+    registry.register(WIKIPEDIA_TOOL)
+    registry.register(CALCULATE_TOOL)
+    registry.register(TIME_DATE_TOOL)
 
     return registry
