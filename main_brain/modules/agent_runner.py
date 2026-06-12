@@ -4,7 +4,7 @@ import requests
 import re
 
 from config.settings import LLM, AGENT
-from modules.agent_tools import build_default_registery, ToolResult
+from modules.agent_tools import build_default_registery, ToolResult, _set_reminder_tool
 
 log = logging.getLogger(__name__)
 
@@ -16,6 +16,17 @@ class AgentRunner:
         self._model = LLM["model"]
         self._registery = build_default_registery()
         self._memory = memory_ref # injected so reminder tool can write DB
+
+        # Inject memory reference into the reminder tool function
+        self._patch_reminder_tool()
+
+    def _patch_reminder_tool(self):
+        memory_ref = self._memory
+
+        def patched(person: str, text: str, when: str):
+            return _set_reminder_tool(person=person, text=text, when=when, memory_ref=memory_ref)
+        
+        self._registery.get("set_reminder").fn = patched
 
     @property
     def tools(self) -> list[dict]:
