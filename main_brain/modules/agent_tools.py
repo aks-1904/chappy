@@ -9,6 +9,8 @@ from datetime import datetime
 import urllib.parse
 import math
 
+from config.settings import AGENT
+
 log = logging.getLogger(__name__)
 
 @dataclass
@@ -207,6 +209,114 @@ def _get_time_date(timezone: str = "local") -> ToolResult:
     result = now.strftime("Today is %A, %B %d %Y. The time is %I:%M %p.")
     return ToolResult(success=True, output=result, data=now.isoformat())
 
+def _get_weather(city: str, units: str = "metric") -> ToolResult:
+    api_key = AGENT.get("openweather_api_key", "")
+
+    # Fallback to OpenWeatherMap
+    if not api_key:
+        # Try wttr.in first (always free, no key)
+        try:
+            url = f"https://wttr.in/{urllib.parse.quote(city)}?format=j1"
+            r = requests.get(url, timeout=8,
+                            headers={"User-Agent": "CompanionRobot/1.0"})
+            if r.status_code == 200:
+                data = r.json()
+                current = data["current_condition"][0]
+                area    = data["nearest_area"][0]
+                loc     = area["areaName"][0]["value"] + ", " + area["country"][0]["value"]
+                temp_c  = current["temp_C"]
+                feels   = current["FeelsLikeC"]
+                desc    = current["weatherDesc"][0]["value"]
+                humid   = current["humidity"]
+                wind    = current["windspeedKmph"]
+                unit_label = "°C" if units == "metric" else "°C"
+                out = (
+                    f"Weather in {loc}: {desc}. "
+                    f"Temperature: {temp_c}{unit_label}, feels like {feels}{unit_label}. "
+                    f"Humidity: {humid}%, wind: {wind} km/h."
+                )
+                return ToolResult(success=True, output=out, data=data)
+        except Exception as e:
+            log.debug(f"[Tools] wttr.in failed: {e}")
+    try:
+        url = "https://api.openweathermap.org/data/2.5/weather"
+        r = requests.get(url, params={
+            "q": city, "appid": api_key, "units": units
+        }, timeout=8)
+        data = r.json()
+        if r.status_code == 200:
+            desc   = data["weather"][0]["description"].capitalize()
+            temp   = data["main"]["temp"]
+            feels  = data["main"]["feels_like"]
+            humid  = data["main"]["humidity"]
+            unit_s = "°C" if units == "metric" else "°F"
+            out = (
+                f"Weather in {data['name']}: {desc}. "
+                f"Temperature: {temp}{unit_s}, feels like {feels}{unit_s}. "
+                f"Humidity: {humid}%."
+            )
+            return ToolResult(success=True, output=out, data=data)
+        return ToolResult(False, f"Weather not found: {data.get('message', 'unknown error')}")
+    except Exception as e:
+        return ToolResult(False, f"Weather fetch failed: {e}")
+
+def _get_news(topic: str = "top headlines", country: str = "in", max_articles: int = 4) -> ToolResult:
+    api_key = AGENT.get("news_api_key", "")
+
+    # Fallback RSS feeds (India-focused + global)
+    RSS_FEEDS = {
+        "in": "https://timesofindia.indiatimes.com/rssfeedstopstories.cms",
+        "world": "http://feeds.bbci.co.uk/news/rss.xml",
+        "tech": "https://feeds.feedburner.com/TechCrunch",
+    }
+
+    if api_key:
+        try:
+            url = "https://newsapi.org/v2/top-headlines"
+            params = {
+                "apiKey":   api_key,
+                "country":  country,
+                "pageSize": max_articles,
+            }
+            if topic.lower() not in ("top headlines", "news", "latest"):
+                params["q"] = topic
+                del params["country"]
+                url = "https://newsapi.org/v2/everything"
+                params["sortBy"] = "publishedAt"
+
+            r = requests.get(url, params=params, timeout=8)
+            data = r.json()
+            articles = data.get("articles", [])
+            if articles:
+                lines = [f"Latest news on '{topic}':"]
+                for a in articles[:max_articles]:
+                    lines.append(f"• {a['title']} — {a.get('source', {}).get('name', '')}")
+                return ToolResult(success=True, output="\n".join(lines), data=articles)
+        except Exception as e:
+            log.debug(f"[Tools] NewsAPI failed: {e}")
+
+    # RSS fallback
+    try:
+        feed_url = RSS_FEEDS.get(country, RSS_FEEDS["world"])
+        if "tech" in topic.lower():
+            feed_url = RSS_FEEDS["tech"]
+        r = requests.get(feed_url, timeout=8,
+                         headers={"User-Agent": "CompanionRobot/1.0"})
+        import xml.etree.ElementTree as ET
+        root = ET.fromstring(r.text)
+        items = root.findall(".//item")[:max_articles]
+        lines = [f"Latest news:"]
+        for item in items:
+            title = item.findtext("title", "").strip()
+            if title:
+                lines.append(f"• {title}")
+        if len(lines) > 1:
+            return ToolResult(success=True, output="\n".join(lines))
+    except Exception as e:
+        log.debug(f"[Tools] RSS fallback failed: {e}")
+
+    return ToolResult(False, "Could not fetch news right now.")
+
 WEB_SEARCH_TOOL = ToolDefinition(
     name="web_search",
     description=(
@@ -286,6 +396,40 @@ TIME_DATE_TOOL = ToolDefinition(
     fn=_get_time_date,
 )
 
+WEATHER_TOOL = ToolDefinition(
+    name="get_weather",
+    description=(
+        "Get the current weather for any city. "
+        "Use when someone asks 'what's the weather like' or 'is it raining in X'."
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "city":  {"type": "string",  "description": "City name, e.g. 'Delhi' or 'London'"},
+            "units": {"type": "string",  "description": "'metric' (Celsius) or 'imperial' (Fahrenheit)", "default": "metric"},
+        },
+        "required": ["city"],
+    },
+    fn=_get_weather,
+)
+
+NEWS_TOOL = ToolDefinition(
+    name="get_news",
+    description=(
+        "Get the latest news headlines on any topic or general top headlines. "
+        "Use when someone asks 'what's in the news' or 'tell me about [topic] news'."
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "topic":        {"type": "string",  "description": "News topic or 'top headlines'", "default": "top headlines"},
+            "country":      {"type": "string",  "description": "Country code: 'in' India, 'us' USA, 'gb' UK", "default": "in"},
+            "max_articles": {"type": "integer", "description": "Number of headlines (1-5)", "default": 4},
+        },
+    },
+    fn=_get_news,
+)
+
 class ToolRegistry:
     def __init__(self):
         self._tools: dict[str, ToolDefinition] = {}
@@ -323,5 +467,7 @@ def build_default_registery() -> ToolRegistry:
     registry.register(WIKIPEDIA_TOOL)
     registry.register(CALCULATE_TOOL)
     registry.register(TIME_DATE_TOOL)
+    registry.register(WEATHER_TOOL)
+    registry.register(NEWS_TOOL)
 
     return registry
