@@ -102,3 +102,7 @@ PERSONA = {
     "proactive_checkin_interval": 300,   # seconds between unsolicited wellness checks
     "hug_offer_distress_level": 2, # DistressLevel value that triggers hug offer
 }
+
+AGENT = {
+    "confirm_before": ["send_email"],
+}

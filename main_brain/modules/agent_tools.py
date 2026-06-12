@@ -55,6 +55,22 @@ class ToolRegistry:
         self._tools[tool.name] = tool
         log.debug(f"[Tools] Registered: {tool.name}")
 
+    def all_schemas(self) -> list[dict]:
+        return [t.to_ollama_schema() for t in self._tools.values()]
+    
+    def call(self, name: str, arguments: dict) -> ToolResult:
+        tool = self._tools.get(name)
+        if not tool:
+            return ToolResult(False, f"Unkown tool: {name}")
+        try:
+            log.info(f"[Tools] Calling {name}({arguments})")
+            result = tool.fn(**arguments)
+            log.info(f"[Tools] {name} -> {result.output[:80]}...")
+            return result
+        except Exception as e:
+            log.error(f"[Tools] {name} error: {e}")
+            return ToolResult(False, f"Tool error: {e}")
+
 def build_default_registery() -> ToolRegistry:
     registry = ToolRegistry()
     registry.register(WEB_SEARCH_TOOL)
