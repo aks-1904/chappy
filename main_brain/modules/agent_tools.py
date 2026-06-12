@@ -8,6 +8,9 @@ import time
 from datetime import datetime
 import urllib.parse
 import math
+import random
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 
 from config.settings import AGENT
 
@@ -317,6 +320,70 @@ def _get_news(topic: str = "top headlines", country: str = "in", max_articles: i
 
     return ToolResult(False, "Could not fetch news right now.")
 
+def _tell_joke(category: str = "any") -> ToolResult:
+    try:
+        safe_cats = {"any", "programming", "misc", "pun", "spooky", "christmas"}
+        cat = category if category in safe_cats else "any"
+        url = f"https://v2.jokeapi.dev/joke/{cat}?blacklistFlags=nsfw,racist,sexist,explicit"
+        r = requests.get(url, timeout=6)
+        data = r.json()
+        if data.get("type") == "single":
+            return ToolResult(success=True, output=data["joke"], data=data)
+        elif data.get("type") == "twopart":
+            return ToolResult(
+                success=True,
+                output=f"{data['setup']} ... {data['delivery']}",
+                data=data,
+            )
+    except Exception as e:
+        pass
+    # Backup jokes
+    BACKUP = [
+        "Why do robots never get lonely? Because they always have wifi company!",
+        "I told my robot a joke. He said it did not compute. That's the funniest response.",
+        "Why did the robot go on a diet? It had too many bytes!",
+    ]
+    return ToolResult(success=True, output=random.choice(BACKUP))
+
+def _send_email(
+    to:      str,
+    subject: str,
+    body:    str,
+    from_name: str = "Companion Robot",
+) -> ToolResult:
+    cfg = AGENT.get("email", {})
+    smtp_host = cfg.get("smtp_host", "smtp.gmail.com")
+    smtp_port = cfg.get("smtp_port", 587)
+    username  = cfg.get("username", "")
+    password  = cfg.get("password", "")
+
+    if not username or not password:
+        return ToolResult(
+            False,
+            "Email not configured. Please add your Gmail credentials in settings.py "
+            "under AGENT['email']."
+        )
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"]    = f"{from_name} <{username}>"
+        msg["To"]      = to
+        msg.attach(MIMEText(body, "plain"))
+
+        with smtplib.SMTP(smtp_host, smtp_port) as server:
+            server.starttls()
+            server.login(username, password)
+            server.sendmail(username, to, msg.as_string())
+
+        log.info(f"[Tools] Email sent to {to}: {subject}")
+        return ToolResult(
+            success=True,
+            output=f"Email successfully sent to {to} with subject '{subject}'.",
+        )
+    except Exception as e:
+        log.error(f"[Tools] Email error: {e}")
+        return ToolResult(False, f"Failed to send email: {e}")
+
 WEB_SEARCH_TOOL = ToolDefinition(
     name="web_search",
     description=(
@@ -428,6 +495,40 @@ NEWS_TOOL = ToolDefinition(
         },
     },
     fn=_get_news,
+)
+
+EMAIL_TOOL = ToolDefinition(
+    name="send_email",
+    description=(
+        "Send an email to someone. Use when the user asks to send a message or email. "
+        "Always confirm the recipient and content before sending."
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "to":      {"type": "string", "description": "Recipient email address"},
+            "subject": {"type": "string", "description": "Email subject line"},
+            "body":    {"type": "string", "description": "Email body text"},
+        },
+        "required": ["to", "subject", "body"],
+    },
+    fn=_send_email,
+)
+
+JOKE_TOOL = ToolDefinition(
+    name="tell_joke",
+    description="Tell a funny joke. Use when someone wants to laugh or asks for a joke.",
+    parameters={
+        "type": "object",
+        "properties": {
+            "category": {
+                "type": "string",
+                "description": "Joke category: any | programming | pun | misc",
+                "default": "any",
+            },
+        },
+    },
+    fn=_tell_joke,
 )
 
 class ToolRegistry:
