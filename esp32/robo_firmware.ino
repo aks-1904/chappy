@@ -82,7 +82,7 @@ bool wsConnected = false;
 // JSON doc sizes
 StaticJsonDocument<1024> rxDoc; // Incoming commands
 StaticJsonDocument<256> txDoc;  // Outgoing events
-char txBug[512];
+char txBuf[512];
 
 // Sensor State
 unsigned long lastSensorMs = 0;
@@ -180,15 +180,147 @@ void setup()
   Serial.println("[ESP32] Setup complete, connecting to laptop...");
 }
 
+float readUltrasonic()
+{
+  digitalWrite(TRIG_PIN, LOW);
+  delayMicroseconds(2);
+  digitalWrite(TRIG_PIN, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIG_PIN, LOW);
+
+  long dur = pulseIn(ECHO_PIN, HIGH, 30000);
+  if (dur == 0)
+    return 400.0f;
+
+  return dur * 0.0343f / 2.0f;
+}
+
 void loop()
 {
-  // put your main code here, to run repeatedly:
+  ws.loop();
+  updateSensors();
+  updateThinking();
+  streamCamera();
+  streamMic();
+}
+
+void streamCamera()
+{
+  if (!wsConnected || !cameraOk)
+    return;
+  unsigned long now = millis();
+  if (now - lastFrameMs < FRAME_INTERVAL_MS)
+    return;
+  lastFrameMs = now;
+
+  camera_fb_t *fb = esp_camera_fb_get();
+  if (!fb)
+    return;
+
+  // Base64 encode JPEG
+  size_t b64Len = 0;
+  size_t b64BufSize = (fb->len * 4 / 3) + 8;
+  uint8_t *b64Data = (uint8_t *)malloc(b64BufSize);
+  if (!b64Data)
+  {
+    esp_camera_fb_return(fb);
+    return;
+  }
+
+  mbedtls_base64_encode(b64Data, b64BufSize, &b64Len, fb->buf, fb->len);
+
+  // Build JSON frame message
+  size_t jsonSize = b64Len + 80;
+  char *jsonBuf = (char *)malloc(jsonSize);
+  if (jsonBuf)
+  {
+    snprintf(jsonBuf, jsonSize,
+             "{\"type\":\"frame\",\"data\":\"%.*s\",\"w\":%zu,\"h\":%zu}", (int)b64Len, b64Data, fb->width, fb->height);
+    ws.sendTXT(jsonBuf);
+    free(jsonBuf);
+  }
+  free(b64Data);
+  esp_camera_fb_return(fb);
+}
+
+// Raw 16-bit PCM buffer
+static int16_t micBuf[MIC_BUF_SAMPLES];
+// Base64 output (ceil(N*2 * 4/3) + 4)
+static char b64Buf[((MIC_BUF_SAMPLES * 2) * 4 / 3) + 8];
+
+void streamMic()
+{
+  if (!wsConnected)
+    return;
+  if (robotState == S_SPEAKING)
+    return; // don't stream while playing audio
+
+  size_t bytesRead = 0;
+  esp_err_t ret = i2s_read(I2S_MIC_PORT, micBuf, MIC_BUF_SAMPLES * sizeof(int16_t), &bytesRead, 0); // non-blocking (0ms timeout)
+  if (ret != ESP_OK || bytesRead == 0)
+    return;
+
+  // Base64 encode raw PCM
+  size_t b64Len = 0;
+  mbedtls_base64_encode((unsigned char *)b64Buf, sizeof(b64Buf), &b64Len, (const unsigned char *)micBuf, bytesRead);
+  b64Buf[b64Len] = '\0';
+
+  // Build JSON with preallocated buffer to avoid heap fragmentation
+  // {"type":"audio","data":"<b64>","sr":16000,"bytes":NNNN}
+  // Use a static large buffer - audio frames are big
+  static char audioBuf[((MIC_BUF_SAMPLES * 2) * 4 / 3) + 128];
+  snprintf(audioBuf, sizeof(audioBuf), "{\"type\":\"audio\",\"data\":\"%s\",\"sr\":%d,\"bytes\":%zu}", b64Buf, MIC_SAMPLE_RATE, bytesRead);
+  ws.sendTXT(audioBuf);
+}
+
+void updateThinking()
+{
+  if (robotState != S_THINKING)
+    return;
+  thinkPhase += 0.08f;
+  float tri = (sinf(thinkPhase) + 1.0f) / 2.0f;
+  int angle = HEAD_PAN_NEUTRAL - 12 + (int)(tri * 24);
+  headPan.write(angle);
+
+  // Pulse LED brightness
+  int bright = (int)(80 + 120 * ((sinf(thinkPhase) + 1.0f) / 2.0f));
+  setLED(0, (int)(bright * 0.4f), bright);
+  delay(20);
+}
+
+void updateSensors()
+{
+  unsigned long now = millis();
+  if (now - lastSensorMs < SENSOR_EVERY)
+    return;
+  lastSensorMs = now;
+
+  pirState = digitalRead(PIR_PIN);
+  touchState = digitalRead(TOUCH_PIN);
+  distCm = readUltrasonic();
+
+  // Fire change events
+  if (pirState && !pirPrev)
+    sendEvent("presence_detected", "{}");
+  if (touchState && !touchPrev)
+    sendEvent("touch_detected", "{}");
+  pirPrev = pirState;
+  touchPrev = touchState;
+
+  // Send sensor bundle
+  txDoc.clear();
+  txDoc["type"] = "sensors";
+  txDoc["dist_cm"] = (int)distCm;
+  txDoc["pir"] = pirState;
+  txDoc["touch"] = touchState;
+  serializeJson(txDoc, txBuf);
+  sendJson(txBuf);
 }
 
 void connectWifi()
 {
   Serial.printf("[WiFi] Connecting to %s", WIFI_SSID);
-  
+
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
@@ -288,6 +420,116 @@ void handleCommand(const char *raw)
   if (err)
   {
     sendEvent("error", "{\"msg\":\"bad_json\"}");
+    return;
+  }
+
+  const char *cmd = rxDoc["cmd"] | "";
+
+  if (!strcmp(cmd, "gesture_wave"))
+  {
+    robotState = S_GESTURE;
+    gestureWave();
+  }
+  else if (!strcmp(cmd, "gesture_handshake"))
+  {
+    robotState = S_GESTURE;
+    gestureHandshake();
+  }
+  else if (!strcmp(cmd, "gesture_nod"))
+  {
+    robotState = S_GESTURE;
+    gestureNod();
+  }
+  else if (!strcmp(cmd, "gesture_shake"))
+  {
+    robotState = S_GESTURE;
+    gestureShake();
+  }
+  else if (!strcmp(cmd, "gesture_happy"))
+  {
+    robotState = S_GESTURE;
+    gestureHappy();
+  }
+  else if (!strcmp(cmd, "gesture_sad"))
+  {
+    robotState = S_GESTURE;
+    gestureSad();
+  }
+  else if (!strcmp(cmd, "gesture_surprised"))
+  {
+    robotState = S_GESTURE;
+    gestureSurprised();
+  }
+  else if (!strcmp(cmd, "gesture_point"))
+  {
+    robotState = S_GESTURE;
+    gesturePointForward();
+  }
+  // Hug gestures 
+  else if (!strcmp(cmd, "gesture_hug_leg"))
+  {
+    robotState = S_GESTURE;
+    gestureHugLeg();
+  }
+  else if (!strcmp(cmd, "gesture_hug_waist"))
+  {
+    robotState = S_GESTURE;
+    gestureHugWaist();
+  }
+  else if (!strcmp(cmd, "gesture_hug_reach"))
+  {
+    robotState = S_GESTURE;
+    gestureHugReach();
+  }
+  else if (!strcmp(cmd, "gesture_comfort_pat"))
+  {
+    robotState = S_GESTURE;
+    gestureComfortPat();
+  }
+  else if (!strcmp(cmd, "thinking_start"))
+  {
+    startThinking();
+  }
+  else if (!strcmp(cmd, "thinking_stop"))
+  {
+    stopThinking();
+  }
+  else if (!strcmp(cmd, "speaking_start"))
+  {
+    robotState = S_SPEAKING;
+    setLED(0, 200, 50);
+  }
+  else if (!strcmp(cmd, "speaking_stop"))
+  {
+    robotState = S_IDLE;
+    setNeutral();
+    setLED(0, 200, 50);
+  }
+  else if (!strcmp(cmd, "neutral"))
+  {
+    robotState = S_IDLE;
+    setNeutral();
+  }
+  else if (!strcmp(cmd, "ping"))
+  {
+    sendEvent("pong", "{}");
+    return;
+  }
+  // Audio playback 
+  else if (!strcmp(cmd, "audio_play"))
+  {
+    playAudio(rxDoc);
+    return;
+  }
+  // LED override 
+  else if (!strcmp(cmd, "set_led"))
+  {
+    setLED(rxDoc["r"] | 0, rxDoc["g"] | 0, rxDoc["b"] | 0);
+    return;
+  }
+  else
+  {
+    sendEvent("error", "{\"msg\":\"unknown_cmd\"}");
     return;
   }
 
