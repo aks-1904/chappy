@@ -414,6 +414,293 @@ void sendEvent(const char *eventName, const char *dataJson)
   sendJson(buf);
 }
 
+void startThinking()
+{
+  robotState = S_THINKING;
+  thinkStartMs = millis();
+  thinkPhase = 0.0f;
+  setLED(0, 80, 200); // blue pulse = thinking
+}
+
+void stopThinking()
+{
+  robotState = S_IDLE;
+  setNeutral();
+  setLED(0, 200, 50);
+}
+
+void updateThinking()
+{
+  if (robotState != S_THINKING)
+    return;
+  thinkPhase += 0.08f;
+  float tri = (sinf(thinkPhase) + 1.0f) / 2.0f;
+  int angle = HEAD_PAN_NEUTRAL - 12 + (int)(tri * 24);
+  headPan.write(angle);
+  // Pulse LED brightness
+  int bright = (int)(80 + 120 * ((sinf(thinkPhase) + 1.0f) / 2.0f));
+
+  setLED(0, (int)(bright * 0.4f), bright);
+  delay(20);
+}
+
+void gestureWave()
+{
+  moveServoSlow(rightArm, RIGHT_ARM_NEUTRAL, 90, 8);
+  for (int i = 0; i < 3; i++)
+  {
+    moveServoSlow(rightArm, 90, 60, 6);
+    moveServoSlow(rightArm, 60, 120, 6);
+  }
+  moveServoSlow(rightArm, 90, RIGHT_ARM_NEUTRAL, 8);
+  finishGesture("wave");
+}
+
+void gestureHandshake()
+{
+  moveServoSlow(rightArm, RIGHT_ARM_NEUTRAL, 90, 6);
+  delay(800);
+  headTilt.write(HEAD_TILT_NEUTRAL - 10);
+  delay(600);
+  headTilt.write(HEAD_TILT_NEUTRAL);
+  delay(400);
+  moveServoSlow(rightArm, 90, RIGHT_ARM_NEUTRAL, 6);
+  finishGesture("handshake");
+}
+
+void gestureNod()
+{
+  for (int i = 0; i < 2; i++)
+  {
+    moveServoSlow(headTilt, HEAD_TILT_NEUTRAL, HEAD_TILT_NEUTRAL - 20, 5);
+    moveServoSlow(headTilt, HEAD_TILT_NEUTRAL - 20, HEAD_TILT_NEUTRAL + 10, 5);
+    moveServoSlow(headTilt, HEAD_TILT_NEUTRAL + 10, HEAD_TILT_NEUTRAL, 5);
+  }
+  finishGesture("nod");
+}
+
+void gestureShake()
+{
+  for (int i = 0; i < 2; i++)
+  {
+    moveServoSlow(headPan, HEAD_PAN_NEUTRAL, HEAD_PAN_NEUTRAL - 25, 5);
+    moveServoSlow(headPan, HEAD_PAN_NEUTRAL - 25, HEAD_PAN_NEUTRAL + 25, 5);
+    moveServoSlow(headPan, HEAD_PAN_NEUTRAL + 25, HEAD_PAN_NEUTRAL, 5);
+  }
+  finishGesture("shake");
+}
+
+void gestureHappy()
+{
+  moveArmsBoth(90, 90, 6);
+  headTilt.write(HEAD_TILT_NEUTRAL - 15);
+  delay(700);
+  for (int i = 0; i < 2; i++)
+  {
+    leftArm.write(70);
+    rightArm.write(110);
+    delay(200);
+    leftArm.write(90);
+    rightArm.write(90);
+    delay(200);
+  }
+  delay(300);
+  moveArmsBoth(LEFT_ARM_NEUTRAL, RIGHT_ARM_NEUTRAL, 6);
+  finishGesture("happy");
+}
+
+void gestureSad()
+{
+  moveServoSlow(headTilt, HEAD_TILT_NEUTRAL, HEAD_TILT_NEUTRAL + 20, 5);
+  delay(1200);
+  moveServoSlow(headTilt, HEAD_TILT_NEUTRAL + 20, HEAD_TILT_NEUTRAL, 5);
+  finishGesture("sad");
+}
+
+void gestureSurprised()
+{
+  headTilt.write(HEAD_TILT_NEUTRAL - 30);
+  leftArm.write(90);
+  rightArm.write(90);
+  delay(600);
+  headTilt.write(HEAD_TILT_NEUTRAL);
+  moveArmsBoth(LEFT_ARM_NEUTRAL, RIGHT_ARM_NEUTRAL, 8);
+  finishGesture("surprised");
+}
+
+void gesturePointForward()
+{
+  moveServoSlow(rightArm, RIGHT_ARM_NEUTRAL, 90, 6);
+  delay(1000);
+  moveServoSlow(rightArm, 90, RIGHT_ARM_NEUTRAL, 6);
+  finishGesture("point");
+}
+
+void finishGesture(const char *name)
+{
+  setNeutral();
+  robotState = S_IDLE;
+  setLED(0, 200, 50);
+  char buf[64];
+  snprintf(buf, sizeof(buf), "{\"gesture\":\"%s\"}", name);
+  sendEvent("gesture_done", buf);
+}
+
+void playAudio(JsonDocument &doc)
+{
+  const char *b64data = doc["data"] | "";
+  int sr = doc["sr"] | 16000;
+
+  size_t b64Len = strlen(b64data);
+  if (b64Len == 0)
+    return;
+
+  // Decode
+  size_t pcmBufSize = (b64Len * 3 / 4) + 4;
+  uint8_t *pcmBuf = (uint8_t *)malloc(pcmBufSize);
+  if (!pcmBuf)
+    return;
+
+  size_t pcmLen = 0;
+  mbedtls_base64_decode(pcmBuf, pcmBufSize, &pcmLen, (const unsigned char *)b64data, b64Len);
+
+  // Update sample rate if changed
+  i2s_set_sample_rates(I2S_SPK_PORT, sr);
+
+  // Write to DMA (blocks until queued)
+  spkBusy = true;
+  size_t written = 0;
+  i2s_write(I2S_SPK_PORT, pcmBuf, pcmLen, &written, portMAX_DELAY);
+  spkBusy = false;
+
+  free(pcmBuf);
+  sendEvent("audio_done", "{}");
+}
+
+void setNeutral()
+{
+  headPan.write(HEAD_PAN_NEUTRAL);
+  headTilt.write(HEAD_TILT_NEUTRAL);
+  leftArm.write(LEFT_ARM_NEUTRAL);
+  rightArm.write(RIGHT_ARM_NEUTRAL);
+}
+
+void moveServoSlow(Servo &s, int from, int to, int stepMs)
+{
+  int step = (to > from) ? 1 : -1;
+  for (int p = from; p != to; p += step)
+  {
+    s.write(p);
+    delay(stepMs);
+  }
+  s.write(to);
+}
+
+void moveArmsBoth(int lTarget, int rTarget, int stepMs)
+{
+  int lNow = leftArm.read(), rNow = rightArm.read();
+  int steps = max(abs(lTarget - lNow), abs(rTarget - rNow));
+  for (int i = 1; i <= steps; i++)
+  {
+    float t = (float)i / steps;
+    leftArm.write(lNow + (int)((lTarget - lNow) * t));
+    rightArm.write(rNow + (int)((rTarget - rNow) * t));
+    delay(stepMs);
+  }
+  leftArm.write(lTarget);
+  rightArm.write(rTarget);
+}
+
+void gestureHugLeg()
+{
+  moveServoSlow(headTilt, HEAD_TILT_NEUTRAL, HEAD_TILT_NEUTRAL + 25, 6);
+  moveArmsBoth(45, 135, 7);
+  delay(200);
+  moveArmsBoth(75, 105, 5);
+  delay(300);
+  moveArmsBoth(82, 98, 4);
+  delay(1500);
+  moveArmsBoth(60, 120, 6);
+  delay(200);
+  moveArmsBoth(LEFT_ARM_NEUTRAL, RIGHT_ARM_NEUTRAL, 7);
+  moveServoSlow(headTilt, HEAD_TILT_NEUTRAL + 25, HEAD_TILT_NEUTRAL - 5, 6);
+  delay(300);
+  moveServoSlow(headTilt, HEAD_TILT_NEUTRAL - 5, HEAD_TILT_NEUTRAL, 5);
+  finishGesture("hug_leg");
+}
+
+void gestureHugWaist()
+{
+  moveServoSlow(headTilt, HEAD_TILT_NEUTRAL, HEAD_TILT_NEUTRAL + 15, 6);
+  moveArmsBoth(60, 120, 7);
+  delay(150);
+  moveArmsBoth(35, 145, 6);
+  delay(300);
+  moveArmsBoth(72, 108, 5);
+  delay(300);
+  moveArmsBoth(80, 100, 4);
+  delay(1800);
+  for (int i = 0; i < 3; i++)
+  {
+    rightArm.write(95);
+    delay(200);
+    rightArm.write(100);
+    delay(200);
+  }
+  moveArmsBoth(50, 130, 7);
+  delay(200);
+  moveArmsBoth(LEFT_ARM_NEUTRAL, RIGHT_ARM_NEUTRAL, 8);
+  moveServoSlow(headTilt, HEAD_TILT_NEUTRAL + 15, HEAD_TILT_NEUTRAL, 5);
+  finishGesture("hug_waist");
+}
+
+void gestureHugReach()
+{
+  moveServoSlow(headTilt, HEAD_TILT_NEUTRAL, HEAD_TILT_NEUTRAL - 20, 6);
+  moveArmsBoth(70, 110, 6);
+  delay(100);
+  moveArmsBoth(88, 92, 5);
+  delay(400);
+  moveArmsBoth(83, 97, 4);
+  delay(2000);
+  for (int i = 0; i < 2; i++)
+  {
+    moveArmsBoth(80, 100, 5);
+    delay(300);
+    moveArmsBoth(84, 96, 5);
+    delay(300);
+  }
+  moveArmsBoth(70, 110, 6);
+  delay(200);
+  moveArmsBoth(50, 130, 7);
+  delay(200);
+  moveArmsBoth(LEFT_ARM_NEUTRAL, RIGHT_ARM_NEUTRAL, 8);
+  moveServoSlow(headTilt, HEAD_TILT_NEUTRAL - 20, HEAD_TILT_NEUTRAL - 10, 5);
+  delay(300);
+  moveServoSlow(headTilt, HEAD_TILT_NEUTRAL - 10, HEAD_TILT_NEUTRAL, 5);
+  finishGesture("hug_reach");
+}
+
+void gestureComfortPat()
+{
+  moveServoSlow(headPan, HEAD_PAN_NEUTRAL, HEAD_PAN_NEUTRAL + 12, 6);
+  moveServoSlow(headTilt, HEAD_TILT_NEUTRAL, HEAD_TILT_NEUTRAL + 10, 6);
+  moveServoSlow(rightArm, RIGHT_ARM_NEUTRAL, 105, 7);
+  delay(300);
+  for (int i = 0; i < 5; i++)
+  {
+    moveServoSlow(rightArm, 105, 98, 4);
+    delay(100);
+    moveServoSlow(rightArm, 98, 105, 4);
+    delay(180);
+  }
+  delay(600);
+  moveServoSlow(rightArm, 105, RIGHT_ARM_NEUTRAL, 8);
+  moveServoSlow(headPan, HEAD_PAN_NEUTRAL + 12, HEAD_PAN_NEUTRAL, 6);
+  moveServoSlow(headTilt, HEAD_TILT_NEUTRAL + 10, HEAD_TILT_NEUTRAL, 6);
+  finishGesture("comfort_pat");
+}
+
 void handleCommand(const char *raw)
 {
   DeserializationError err = deserializeJson(rxDoc, raw);
@@ -465,7 +752,7 @@ void handleCommand(const char *raw)
     robotState = S_GESTURE;
     gesturePointForward();
   }
-  // Hug gestures 
+  // Hug gestures
   else if (!strcmp(cmd, "gesture_hug_leg"))
   {
     robotState = S_GESTURE;
@@ -515,13 +802,13 @@ void handleCommand(const char *raw)
     sendEvent("pong", "{}");
     return;
   }
-  // Audio playback 
+  // Audio playback
   else if (!strcmp(cmd, "audio_play"))
   {
     playAudio(rxDoc);
     return;
   }
-  // LED override 
+  // LED override
   else if (!strcmp(cmd, "set_led"))
   {
     setLED(rxDoc["r"] | 0, rxDoc["g"] | 0, rxDoc["b"] | 0);
