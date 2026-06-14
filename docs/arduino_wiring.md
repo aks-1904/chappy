@@ -76,5 +76,5 @@ Adjust sensitivity and delay ports on the PIR module:
 ## PCB & Schemantic Design
 
 You can also check the PCB & Schemantic Design for connecting hardwares with Arduino accordingly
-- **PCB:** [PCB Design Arduino](../ardiono/arduino.kicad_pcb)
-- **Schemantic**: [Schemantic Design Arduino](../arduino/arduino.kicad_sch) 
+- **PCB:** [PCB Design Arduino](../arduino/ARDUINO_PCB.kicad_pcb)
+- **Schemantic**: [Schemantic Design Arduino](../arduino/ARDUINO_SCM.kicad_sch) 

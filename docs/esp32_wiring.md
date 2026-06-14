@@ -228,5 +228,5 @@ Expected output:
 ## PCB & Schemantic Design
 
 You can also check the PCB & Schemantic Design for connecting hardwares with ESP32 accordingly
-- **PCB:** [PCB Design ESP32](../esp32/esp32.kicad_pcb)
-- **Schemantic**: [Schemantic Design ESP32](../esp32/esp32.kicad_sch) 
+- **PCB:** [PCB Design ESP32](../esp32/ESP32_PCB.kicad_pcb)
+- **Schemantic**: [Schemantic Design ESP32](../esp32/ESP32_SCM.kicad_sch) 
