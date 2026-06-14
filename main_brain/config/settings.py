@@ -106,3 +106,11 @@ PERSONA = {
 AGENT = {
     "confirm_before": ["send_email"],
 }
+
+WIRELESS = {
+    "enabled": True, # If Flase, falls back to USB serial (Arduino)
+    "ws_port": 8765,
+    "ws_path": "/robot",
+    # How long to wait (seconds) for ESP32 to connect before falling back
+    "connect_timeout": 15,
+}

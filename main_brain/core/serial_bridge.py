@@ -21,6 +21,10 @@ class SerialBridge:
         self._gesture_callbacks: dict[str, Callable] = {}
         self._lock: threading.Lock = threading.Lock()
 
+    @property
+    def connected(self) -> bool:
+        return self._connected
+
     @staticmethod
     def list_ports() -> list[str]:
         return [p.device for p in serial.tools.list_ports.comports()]
