@@ -32,7 +32,6 @@ class RobotState(Enum):
     SPEAKING = auto()
     GESTURE_ONLY = auto()
     SUPPORT      = auto() # in emotional support conversation
-    GESTURE_ONLY = auto()
 
 class RobotBrain:
     def __init__(self):
@@ -58,9 +57,9 @@ class RobotBrain:
     # State helpers
     def _set_state(self, new_state: RobotState):
         with self._state_lock:
-            old = self._state
+            old = self._state.name
             self._state = new_state
-            log.debug(f"[Robot Brain] State: {old.name} -> {new_state.name}")
+            log.debug(f"[Robot Brain] State: {old} -> {new_state.name}")
 
     @property
     def state(self) -> RobotState:
@@ -71,11 +70,7 @@ class RobotBrain:
         log.info("[Robot Brain] Initializing")
 
         # Hardware connecting (optional - robot works without arduino)
-        if serial_port:
-            connected = self.serial.connect(serial_port)
-        else:
-            ports = SerialBridge.list_ports()
-            connected = self.serial.connect(ports[0]) if ports else False
+        connected = self.serial.connect(serial_port)
 
         if not connected:
             log.warning("[Robot Brain] Arduino not connected")
@@ -294,7 +289,7 @@ class RobotBrain:
                 dist = data.get("dist_cm", 999)
 
                 # Someone walked close enough to greet
-                if(dict <= PROXIMITY["greet_distance"] and self.state == RobotState.IDLE):
+                if(dist <= PROXIMITY["greet_distance"] and self.state == RobotState.IDLE):
                     threading.Thread(
                         target=self._greet_by_proximity,
                         daemon=True
@@ -505,7 +500,8 @@ class RobotBrain:
                 self._execute_gesture(mapped.replace("gesture_", ""), person)
 
         self.serial.speaking_start()
-        self._speak(clean, emotion="neutral")
+        speak_emotion = self.support.dominant_recent_emotion(person)
+        self._speak(clean, emotion=speak_emotion)
         self.serial.speaking_stop()
 
         self.memory.add_interaction(person, "robot", clean, "neutral")
@@ -527,7 +523,7 @@ class RobotBrain:
             log.info(f"[Robot Brain] Proactive check-in for {person}")
             threading.Thread(
                 target=self._initiate_support,
-                args=(person, "neutral"),
+                args=(person, self.support.dominant_recent_emotion(person)),
                 daemon=True
             ).start()
 

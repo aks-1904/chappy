@@ -1,5 +1,4 @@
 import serial
-import serial.tools.list_ports
 import time
 import logging
 from typing import Optional
@@ -7,6 +6,7 @@ import queue
 from typing import Callable
 import json
 import threading
+import serial.tools.list_ports
 
 from config.settings import SERIAL
 
@@ -20,6 +20,8 @@ class SerialBridge:
         self._event_queue: queue.Queue  = queue.Queue(maxsize=64)
         self._gesture_callbacks: dict[str, Callable] = {}
         self._lock: threading.Lock = threading.Lock()
+        self._reader_thread: Optional[threading.Thread] = None
+        self._stop_event: threading.Event = threading.Event()
 
     @property
     def connected(self) -> bool:
@@ -29,6 +31,66 @@ class SerialBridge:
     def list_ports() -> list[str]:
         return [p.device for p in serial.tools.list_ports.comports()]
     
+    def _start_reader(self):
+        self._stop_event.clear()
+        self._reader_thread = threading.Thread(
+            target=self._reader_loop,
+            name="SerialReader",
+            daemon=True
+        )
+        self._reader_thread.start()
+    
+    def _dispatch(self, msg: dict):
+        event = msg.get("event", "")
+        data = msg.get("data", {})
+
+        # Put on queue for main-thread consumers
+        try:
+            self._event_queue.put_nowait(msg)
+        except queue.Full:
+            self._event_queue.get_nowait() # drop oldest
+            self._event_queue.put_nowait(msg)
+
+        # Gesture-done callbacks
+        if event == "gesture_done":
+            gesture = data.get("gesture", "")
+            cb = self._gesture_callbacks.pop(gesture, None)
+            if cb:
+                cb()
+
+    def _reader_loop(self):
+        while not self._stop_event.is_set():
+            if not self._port or not self._port.is_open:
+                break
+            try:
+                raw = self._port.readline()
+                if not raw:
+                    continue
+                line = raw.decode("utf-8", errors="ignore").strip()
+                if not line:
+                    continue
+                try:
+                    msg = json.loads(line)
+                    self._dispatch(msg)
+                except json.JSONDecodeError:
+                    log.debug(f"[Serial] Non-JSON line: {line}")
+            except serial.SerialException as e:
+                log.warning(f"[Serial] Read error: {e}")
+                self._connected = False
+                threading.Thread(
+                    target=self._reconnect_loop,
+                    daemon=True
+                ).start()
+                break
+
+    def _reconnect_loop(self):
+        delay = SERIAL["reconnect_delay"]
+        log.info(f"[Serial] Reconnecting in {delay}s...")
+        while not self._stop_event.is_set() and not self._connected:
+            time.sleep(delay)
+            log.info("[Serial] Attempting reconnect...")
+            self.connect()
+
     def connect(self, port: Optional[str] = None) -> bool:
         port = port or SERIAL["port"]
         try:
@@ -51,6 +113,9 @@ class SerialBridge:
             return False
         
     def disconnect(self):
+        self._stop_event.set()
+        if self._reader_thread:
+            self._reader_thread.join(timeout=2)
         if self._port and self._port.is_open:
             self._port.close()
         self._connected = False
