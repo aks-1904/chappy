@@ -131,7 +131,7 @@ class SpeechModule:
         max_chunks = int(AUDIO["max_record_seconds"] * SAMPLE_RATE / CHUNK_SIZE)
         threshold = AUDIO["vad_threshold"] * 32768 # normalize to int16 range
 
-        log.debug("[Speech Recording...]")
+        log.debug("[Speech Recording...")
         for _ in range(max_chunks):
             chunk = stream.read(CHUNK_SIZE, exception_on_overflow=False)
             frames.append(chunk)
@@ -199,11 +199,6 @@ class SpeechModule:
         return t
     
     def speak_coqui(self, text: str, blocking: bool = False):
-        """
-        Use Coqui TTS instead of pyttsx3.
-        Requires: pip install TTS
-        Enable by setting AUDIO['tts_engine'] = 'coqui' in settings.
-        """
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
             out_path = f.name
 

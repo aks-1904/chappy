@@ -46,11 +46,11 @@ class DistressLevel(Enum):
 
 class EmotionalSupportModule:
     WINDOW_SIZE = 20 # Rolling window
-    CHECKIN_COOLDOWN = 120.0
-    CHECKIN_AFTER = 45.0 # Minimum interval between unsolicited check-ins (seconds)
+    CHECKIN_COOLDOWN = 120.0 # Minimum interval between unsolicited check-ins (seconds)
+    CHECKIN_AFTER = 45.0 
 
     def __init__(self):
-        self._history = dict[str, deque] = {}
+        self._history: dict[str, deque] = {}
         self._last_checkin: dict[str, float] = {}
         self._support_mode: dict[str, bool]  = {} # in active support conversation
         self._turn_counts: dict[str, int] = {} # turns of support given
@@ -205,7 +205,7 @@ YOUR TASK THIS TURN:
 - Do NOT immediately ask "what's wrong?" - ease in.
 - Offer presence: "I'm right here with you."
 - If appropriate, offer [GESTURE:comfort_pat] or [GESTURE:hug_leg].
-- Keep it short — 2 sentences max. Let them lead.
+- Keep it short - 2 sentences max. Let them lead.
 """
         elif turn == 1:
             return f"""

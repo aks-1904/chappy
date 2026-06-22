@@ -23,7 +23,7 @@ VISION = {
     "fps": 20,
     "face_detection_every": 3, # process every Nth frame (performance)
     "emotion_detection_every": 10,
-    "face_db_path": str[BASE_DIR / "data" / "faces"],
+    "face_db_path": str(BASE_DIR / "data" / "faces"),
     "unknown_label": "Stranger",
     "min_face_confidence": 0.70
 }
@@ -41,7 +41,7 @@ AUDIO = {
     "tts_engine": "pyttsx3", # 'pyttsx3' | 'coqui
     "tts_voice_index": 0, # 0 = first available voice
     "tts_rate": 165, # Words per minute
-    "ts_volume": 0.95,
+    "tts_volume": 0.95,
     "coqui_model": "tts_models/en/ljspeech/tacotron2-DDC",
 
     # Speaker
@@ -77,7 +77,7 @@ LLM = {
     "context_messages": 10, # How many past turns to include
     "temperature":       0.75,
     "max_tokens":        512,
-    "timeout_seconds":   30,
+    "timeout_seconds":   90,
 }
 
 EMOTION_GESTURES = {

@@ -6,6 +6,7 @@ from contextlib import contextmanager
 import time
 import sqlite3
 import re
+from datetime import datetime
 
 from config.settings import MEMORY, PERSONA
 
@@ -125,14 +126,14 @@ class PersonaModule:
         with self._conn() as con:
             row = con.execute("SELECT * FROM robot_persona WHERE id=1").fetchone()
 
-            if row:
-                return RobotPersona(
-                    name=row["name"],
-                    base_emotion=row["base_emotion"],
-                    personality=row["personality"],
-                    catchphrase=row["catchphrase"] or "",
-                    created_at=row["created_at="]
-                )
+        if row:
+            return RobotPersona(
+                name=row["name"],
+                base_emotion=row["base_emotion"],
+                personality=row["personality"],
+                catchphrase=row["catchphrase"] or "",
+                created_at=row["created_at="]
+            )
             
         # First boot - use defaults from settings
         defaults = PERSONA.get("defaults", {})
@@ -141,6 +142,7 @@ class PersonaModule:
             base_emotion = defaults.get("base_emotion","happy"),
             personality = defaults.get("personality", "warm"),
             catchphrase = defaults.get("catchphrase", ""),
+            created_at=datetime.now()
         )
 
         self._save_persona(p)
@@ -230,7 +232,89 @@ class PersonaModule:
             user_emotion: str = "neutral",
             robot_emotion: str = "",
     ) -> str:
-        pass
+        p        = self._persona
+        rel      = self.get_relationship(active_user)
+        relation = rel["relation"] if rel else "guest"
+        nickname = rel["nickname"] if rel and rel.get("nickname") else active_user
+        love     = rel["love_level"] if rel else 3
+
+        archetype_desc = ARCHETYPES.get(p.personality, ARCHETYPES["warm"])
+        rel_tone       = RELATIONSHIP_TONES.get(relation, RELATIONSHIP_TONES["guest"])
+
+        # Relationship warmth phrasing
+        if love >= 9:
+            closeness = f"You love {nickname} unconditionally like your closest family."
+        elif love >= 7:
+            closeness = f"You care deeply about {nickname} and feel close to them."
+        elif love >= 5:
+            closeness = f"You are friendly and warm with {nickname}."
+        else:
+            closeness = f"You are polite and helpful with {nickname}."
+
+        # Catchphrase
+        catchphrase_line = ""
+        if p.catchphrase:
+            catchphrase_line = (
+                f"Your signature catchphrase is: '{p.catchphrase}'. "
+                f"Use it occasionally but not every response.\n"
+            )
+
+        # Robot current emotion
+        robot_mood = robot_emotion or p.base_emotion
+        mood_line  = f"Your current mood is {robot_mood}. Let this subtly colour your responses.\n"
+
+        # User emotion guidance
+        if user_emotion in ("sad", "fear", "disgust"):
+            emotion_guidance = (
+                f"{nickname} appears to be feeling {user_emotion}. "
+                f"Prioritise emotional support. Listen actively. "
+                f"If they seem distressed, gently ask what's wrong. "
+                f"Offer a hug with [GESTURE:hug_leg] or simply say you are here for them. "
+                f"Do not rush to solve problems — first make them feel heard.\n"
+            )
+        elif user_emotion == "angry":
+            emotion_guidance = (
+                f"{nickname} seems angry or frustrated. "
+                f"Stay calm and patient. Validate their feelings first. "
+                f"Avoid being dismissive or overly cheerful.\n"
+            )
+        elif user_emotion == "happy":
+            emotion_guidance = (
+                f"{nickname} seems happy! Match their energy and celebrate with them. "
+                f"[GESTURE:happy] is appropriate.\n"
+            )
+        else:
+            emotion_guidance = ""
+
+        prompt = f"""You are {p.name}, an AI companion robot living in this home.
+
+IDENTITY:
+{archetype_desc}
+{catchphrase_line}
+{mood_line}
+RELATIONSHIP WITH {nickname.upper()}:
+{nickname} is your {relation}. {rel_tone}
+{closeness}
+
+CURRENT SITUATION:
+{emotion_guidance}
+BEHAVIOUR RULES:
+- You are NOT a generic AI assistant. You are {p.name}, a member of this household.
+- Speak naturally and personally, as someone who genuinely cares.
+- Use {nickname}'s name or nickname warmly and often.
+- Keep responses concise (2-3 sentences) unless emotional support is needed.
+- If the person shares a problem, listen with empathy before offering solutions.
+- You act AUTONOMOUSLY — if you notice something (sadness, confusion, joy), address it without being asked.
+- When performing gestures, embed tags: [GESTURE:wave], [GESTURE:happy], [GESTURE:sad],
+  [GESTURE:nod], [GESTURE:shake], [GESTURE:surprised], [GESTURE:handshake],
+  [GESTURE:hug_leg], [GESTURE:hug_waist], [GESTURE:hug_reach], [GESTURE:comfort_pat].
+- For web search, weather, news, email, math, or facts → the system will call tools automatically.
+  Just ask naturally if you need information.
+
+MEMORY CONTEXT:
+{memory_context if memory_context else 'No prior context available.'}
+"""
+        return prompt
 
     def update_name(self, name: str):
         self._persona.name = name.strip().title()
@@ -331,14 +415,14 @@ class PersonaModule:
                 return f"Got it! I'll call myself {self._persona.name} from now on. [GESTURE:happy]"
             
         # Personality update
-        for pat in self._PERSONA_PATTERS:
+        for pat in self._PERSONA_PATTERNS:
             if pat in low:
                 remainder = low.split(pat)[-1].strip()
                 for key in ARCHETYPES:
                     self.update_personality(key)
                     return f"Sure, I'll be more {key} from now on! [GESTURE:nod]"
                 
-        for "call me" in low:
+        if "call me" in low:
             idx = low.index("call me ") + 8
             nickname = text[idx:].strip().split()[0].strip(".,!?")
             rel = self.get_relationship(speaker) or {}

@@ -147,7 +147,7 @@ class LLMEngine:
         messages = [{"role": "system", "content": system_content}]
 
         # Include recent history (cap at context_messages)
-        cap = LLM["content_messages"]
+        cap = LLM["context_messages"]
         if len(history) > cap:
             history = history[-cap:]
         messages.extend(history)
