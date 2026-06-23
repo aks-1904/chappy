@@ -74,6 +74,7 @@ The `main_brain` is a modular Python application handling the heavy lifting:
 - `SpeechModule`: Audio capture, Whisper STT, TTS.
 - `MemoryModule`: SQLite DB persisting users, interaction history, and reminders.
 - `LLMEngine` & `AgentRunner`: Handles Ollama inference and function calling.
+- `WirelessSpeech`: Handle Wireless speech 
 
 ---
 
@@ -85,8 +86,8 @@ The `main_brain` is a modular Python application handling the heavy lifting:
     - Arduino IDE (for flashing firmware).
 1. Hardware Setup
     - **Wiring:** Before uploading code, assemble the hardware by following the Wiring Guide or fabricating the provided KiCad PCB files.
-        - **Arduino: ** [Arduino Wiring Guide](docs/arduino_wiring.md)
-        - **ESP32: ** [ESP32 Wiring Guide](docs/esp32_wiring.md)
+        - **Arduino:** [Arduino Wiring Guide](docs/arduino_wiring.md)
+        - **ESP32:** [ESP32 Wiring Guide](docs/esp32_wiring.md)
     - **Arduino:** Flash `arduino/robo_firmware.ino`. Connect via USB.
     - **ESP32:** Flash `esp32/robo_firmware.ino`. Update `WIFI_SSID`, `WIFI_PASSWORD`, and `LAPTOP_IP` in the code before uploading.
 1. Software Setup
@@ -108,34 +109,25 @@ Chappy uses a clean command-line interface to switch between hardware modes and 
 **1. Start the Robot (Arduino USB Mode):**
 Run the brain and connect to the Arduino via USB.
 ```bash
-# Auto-detect the Arduino serial port and start
-python main.py arduino
-
 # Specify a custom serial port manually (e.g., COM3 or /dev/ttyUSB0)
-python main.py arduino --port COM3
+python main.py --port ttyUSB0
+
+# List serial ports and exit
+python main.py --list-ports
 ```
 
 **2. Start the Robot (ESP32 WiFi Mode):**
 Run the brain and connect to the ESP32 wirelessly over your local network.
 ``` bash
 # Start with ESP32 via WiFi
-python main.py esp32
-
-# Run in headless mode
-python main.py esp32 --headless
+python main.py --wireless
 ```
 
 **3. Register a New Face**
 Teach Chappy to recognize you! Stand in front of the camera and follow the on-screen prompts (Press `SPACE` to capture or `A` for a 3-second timer).
 ``` bash
 # Register using the default USB webcam (captures 3 photos by default)
-python main.py register --name "Your Name"
-
-# Capture a specific number of photos
-python main.py register --name "Your Name" --photos 5
-
-# Register a face using the ESP32 wireless camera instead of the laptop webcam
-python main.py register --name "Your Name" --wireless
+python main.py --register "Your Name"
 ```
 
 ---
@@ -145,7 +137,7 @@ Chappy is evolving from a physical companion into a seamless bridge between the 
 
 ### Desktop UI Dashboard
 - **Companion App:** A sleek desktop application (built with PyQt or Electron) to easily monitor Chappy's status.
-- ** Configuration Hub:** Easily change API keys, configure email settings, adjust persona traits, and manage stored relationships/memory without touching the code.
+- **Configuration Hub:** Easily change API keys, configure email settings, adjust persona traits, and manage stored relationships/memory without touching the code.
 - **Live Telemetry:** View live camera feeds, emotion charts, sensor data, and LLM reasoning logs in real-time.
 
 ### Screen-Aware Agentic Assistant
