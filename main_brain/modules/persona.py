@@ -132,7 +132,7 @@ class PersonaModule:
                 base_emotion=row["base_emotion"],
                 personality=row["personality"],
                 catchphrase=row["catchphrase"] or "",
-                created_at=row["created_at="]
+                created_at=row["created_at"]
             )
             
         # First boot - use defaults from settings

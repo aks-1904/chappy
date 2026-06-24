@@ -114,7 +114,7 @@ def _register_face(brain: RobotBrain, name: str):
     
     if frame is not None:
         ok = brain.vision.register_face(name, frame)
-        print(f"{'Registered' if ok else 'No face detected'} for {'{name'}'")    
+        print(f"{'Registered' if ok else 'No face detected'} for '{name}'")    
     else:
         print("Camera not available")
 

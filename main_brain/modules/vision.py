@@ -26,7 +26,7 @@ class Perception:
 
 class VisionModule:
     def __init__(self):
-        self._cap: Optional[cv2.VideoCampute] = None
+        self._cap: Optional[cv2.VideoCapture] = None
         self._running: bool = False
         self._thread:  Optional[threading.Thread] = None
         self._frame_count: int = 0

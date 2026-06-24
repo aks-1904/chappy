@@ -8,7 +8,7 @@ from config.settings import LLM
 
 log = logging.getLogger(__name__)
 
-_GESTURE_PATTERN = re.compile(r"\[FESTURE:(\w+)\]", re.IGNORECASE)
+_GESTURE_PATTERN = re.compile(r"\[GESTURE:(\w+)\]", re.IGNORECASE)
 
 class LLMEngine:
     def __init__(self):

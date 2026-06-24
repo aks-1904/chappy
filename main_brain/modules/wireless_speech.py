@@ -35,7 +35,7 @@ class WirelessSpeechModule(SpeechModule):
         # Silence detection params (mirrors USB mic logic)
         self._chunk_bytes = 1600 * 2 # ~100ms at 16kHz int 16
         self._max_silence = int(AUDIO["silence_timeout"] * SAMPLE_RATE / (self._chunk_bytes // 2))
-        self._max_chunks = int(AUDIO["max_record_seconds" * SAMPLE_RATE / (self._chunk_bytes // 2)])
+        self._max_chunks = int(AUDIO["max_record_seconds"] * SAMPLE_RATE / (self._chunk_bytes // 2))
 
     def start(self):
         self._init_tts()

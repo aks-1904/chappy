@@ -102,7 +102,7 @@ class SpeechModule:
 
     def _init_tts(self):
         try:
-            self._tts_enine = pyttsx3.init()
+            self._tts_engine = pyttsx3.init()
             voices = self._tts_engine.getProperty("voices")
             vi = AUDIO["tts_voice_index"]
             
@@ -145,10 +145,10 @@ class SpeechModule:
             else:
                 silence_chunks = 0
 
-            stream.stop_stream()
-            stream.close()
+        stream.stop_stream()
+        stream.close()
 
-            return b"".join(frames)
+        return b"".join(frames)
 
     def listen_once(self) -> Optional[str]:
         raw_pcm = self._record_audio()

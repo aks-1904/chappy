@@ -52,7 +52,6 @@ class WirelessBridge:
         
     def _on_esp32_connected(self):
         log.info("[Wireless] ESP32 joined")
-        bus.post("arduino_status", {"connected": True, "mode": "wireless"})
         # Drain queues left from previous session
         while not self._event_queue.empty():
             try: 

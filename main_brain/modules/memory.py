@@ -47,7 +47,7 @@ CREATE INDEX IF NOT EXISTS idx_reminders_due
 """
 
 def _fmt_time(ts: float) -> str:
-    return datetime.datetime.fromtimestamp(ts).strftime("%Y-%m-%d %h:%M")
+    return datetime.datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M")
 
 class MemoryModule:
     def __init__(self):

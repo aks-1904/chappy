@@ -3,7 +3,7 @@ from typing import Optional
 import logging
 import threading
 import time
-import datetime
+from datetime import datetime
 
 from core.serial_bridge import SerialBridge
 from modules.vision import VisionModule, Perception
@@ -190,7 +190,7 @@ class RobotBrain:
         self._set_state(RobotState.THINKING)
         self.serial.thinking_start()
 
-        clean, geatures = self.llm.generate_response(
+        clean, gestures = self.llm.generate_response(
             user_input=user_text or f"[Robot is initiating emotional support support for {nickname}]",
             memory_context="",
             emotion=self.support.dominant_recent_emotion(person),
@@ -200,7 +200,7 @@ class RobotBrain:
         self.serial.thinking_stop()
         self._set_state(RobotState.SUPPORT)
 
-        for g in geatures:
+        for g in gestures:
             self._execute_gesture(g, person)
 
         # Speak
