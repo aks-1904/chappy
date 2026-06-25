@@ -59,7 +59,7 @@ Chappy's firmware supports two microcontroller platforms. You can build Chappy u
 
 ### Circuit, PCB & Wiring Guides
 To make building Chappy easier, we provide full schematics, custom PCB layouts, and step-by-step wiring instructions.
-- **Wiring Guide:** Start here if you are building Chappy on a breadboard or perfboard. Detailed pin-to-pin connection instructions for both Arduino and ESP32 can be found in our [Wiring Guide (wiring.md)](docs/wiring.md).
+- **Wiring Guide:** Start here if you are building Chappy on a breadboard or perfboard. Detailed pin-to-pin connection instructions for both Arduino and ESP32 can be found in our [Wiring Guide (Arduino)](docs/arduino_wiring.md) and [Wiring Guide (ESP32)](docs/esp32_wiring.md).
 - **Schematics (.kicad_sch):** The logical circuit design for the robot's hardware. [View ESP32 Schematic](./esp32/ESP32_SCM.kicad_sch) | [View Arduino Schematic](./arduino/ARDUINO_SCM.kicad_sch).
 
 (Note: You will need [KiCad](https://www.kicad.org/) installed to view and edit the `.kicad_sch` file).*
