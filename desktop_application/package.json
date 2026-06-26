@@ -1,0 +1,43 @@
+{
+  "name": "chappy",
+  "version": "1.0.0",
+  "description": "Desktop control center for AI Companion Robot",
+  "main": "src/main/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build:win": "electron-builder --win",
+    "build:mac": "electron-builder --mac",
+    "build:linux": "electron-builder --linux"
+  },
+  "build": {
+    "appId": "com.companionrobot.app",
+    "productName": "Chappy",
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "src/assets/icon.ico"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "src/assets/icon.icns"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "src/assets/icon.png"
+    }
+  },
+  "dependencies": {
+    "serialport": "^12.0.0",
+    "ws": "^8.16.0",
+    "better-sqlite3": "^9.4.3",
+    "node-fetch": "^3.3.2"
+  },
+  "devDependencies": {
+    "electron": "^29.0.0",
+    "electron-builder": "^24.9.1"
+  }
+}
