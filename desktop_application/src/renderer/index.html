@@ -1,82 +1,88 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy"
-    content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; script-src 'self';">
-  <title>Companion Robot</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&family=Orbitron:wght@500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
-</head>
-<body>
-
-  <!-- Custom title bar -->
-  <div class="titlebar" id="titlebar">
-    <div class="titlebar-drag">
-      <span class="titlebar-icon">◈</span>
-      <span class="titlebar-title">COMPANION ROBOT</span>
-      <div class="titlebar-status">
-        <span class="status-dot" id="statusDot"></span>
-        <span id="statusText">Disconnected</span>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; script-src 'self';"
+    />
+    <title>Companion Robot</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&family=Orbitron:wght@500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <!-- Custom title bar -->
+    <div class="titlebar" id="titlebar">
+      <div class="titlebar-drag">
+        <span class="titlebar-icon">◈</span>
+        <span class="titlebar-title">COMPANION ROBOT</span>
+        <div class="titlebar-status">
+          <span class="status-dot" id="statusDot"></span>
+          <span id="statusText">Disconnected</span>
+        </div>
+      </div>
+      <div class="titlebar-controls">
+        <button class="tb-btn" id="minimize-button">─</button>
+        <button class="tb-btn" id="maximize-button">□</button>
+        <button class="tb-btn tb-close" id="close-button">✕</button>
       </div>
     </div>
-    <div class="titlebar-controls">
-      <button class="tb-btn" onclick="window.robot.minimize()">─</button>
-      <button class="tb-btn" onclick="window.robot.maximize()">□</button>
-      <button class="tb-btn tb-close" onclick="window.robot.close()">✕</button>
+
+    <!-- Main layout -->
+    <div class="app-layout">
+      <!-- Sidebar nav -->
+      <nav class="sidebar">
+        <div class="nav-brand">
+          <div class="brand-orb"></div>
+        </div>
+        <ul class="nav-list">
+          <li class="nav-item active" data-page="connect">
+            <span class="nav-icon">⬡</span
+            ><span class="nav-label">Connect</span>
+          </li>
+          <li class="nav-item" data-page="dashboard">
+            <span class="nav-icon">◈</span
+            ><span class="nav-label">Dashboard</span>
+          </li>
+          <li class="nav-item" data-page="control">
+            <span class="nav-icon">⌖</span
+            ><span class="nav-label">Control</span>
+          </li>
+          <li class="nav-item" data-page="camera">
+            <span class="nav-icon">◉</span><span class="nav-label">Camera</span>
+          </li>
+          <li class="nav-item" data-page="persona">
+            <span class="nav-icon">◧</span
+            ><span class="nav-label">Persona</span>
+          </li>
+          <li class="nav-item" data-page="memory">
+            <span class="nav-icon">▦</span><span class="nav-label">Memory</span>
+          </li>
+          <li class="nav-item" data-page="settings">
+            <span class="nav-icon">⚙</span
+            ><span class="nav-label">Settings</span>
+          </li>
+          <li class="nav-item" data-page="logs">
+            <span class="nav-icon">≡</span><span class="nav-label">Logs</span>
+          </li>
+        </ul>
+        <div class="nav-footer">
+          <button class="estop-btn" id="emergency-stop-button">⊗ STOP</button>
+        </div>
+      </nav>
+
+      <!-- Page content injected by JS -->
+      <main class="main-content" id="mainContent"></main>
     </div>
-  </div>
 
-  <!-- Main layout -->
-  <div class="app-layout">
+    <!-- Toast container -->
+    <div id="toastContainer" class="toast-container"></div>
 
-    <!-- Sidebar nav -->
-    <nav class="sidebar">
-      <div class="nav-brand">
-        <div class="brand-orb"></div>
-      </div>
-      <ul class="nav-list">
-        <li class="nav-item active" data-page="connect"   onclick="window.showPage('connect')">
-          <span class="nav-icon">⬡</span><span class="nav-label">Connect</span>
-        </li>
-        <li class="nav-item" data-page="dashboard" onclick="window.showPage('dashboard')">
-          <span class="nav-icon">◈</span><span class="nav-label">Dashboard</span>
-        </li>
-        <li class="nav-item" data-page="control"   onclick="window.showPage('control')">
-          <span class="nav-icon">⌖</span><span class="nav-label">Control</span>
-        </li>
-        <li class="nav-item" data-page="camera"    onclick="window.showPage('camera')">
-          <span class="nav-icon">◉</span><span class="nav-label">Camera</span>
-        </li>
-        <li class="nav-item" data-page="persona"   onclick="window.showPage('persona')">
-          <span class="nav-icon">◧</span><span class="nav-label">Persona</span>
-        </li>
-        <li class="nav-item" data-page="memory"    onclick="window.showPage('memory')">
-          <span class="nav-icon">▦</span><span class="nav-label">Memory</span>
-        </li>
-        <li class="nav-item" data-page="settings"  onclick="window.showPage('settings')">
-          <span class="nav-icon">⚙</span><span class="nav-label">Settings</span>
-        </li>
-        <li class="nav-item" data-page="logs"      onclick="window.showPage('logs')">
-          <span class="nav-icon">≡</span><span class="nav-label">Logs</span>
-        </li>
-      </ul>
-      <div class="nav-footer">
-        <button class="estop-btn" onclick="window.robot.emergencyStop()">⊗ STOP</button>
-      </div>
-    </nav>
-
-    <!-- Page content injected by JS -->
-    <main class="main-content" id="mainContent"></main>
-
-  </div>
-
-  <!-- Toast container -->
-  <div id="toastContainer" class="toast-container"></div>
-  
-  <script type="module" src="main.js"></script>
-
-</body>
+    <script type="module" src="main.js"></script>
+  </body>
 </html>
