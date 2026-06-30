@@ -45,7 +45,15 @@ function createWindow() {
 
   mainWindow.on("closed", () => {
     mainWindow = null;
+    robotBridge?.disconnect();
   });
+}
+
+// Send an IPC event to the renderer
+function send(channel, data) {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send(channel, data);
+  }
 }
 
 // Wire robot-bridge events -> renderer IPC channels
@@ -77,5 +85,6 @@ app.whenReady().then(() => {
 });
 
 app.on("window-all-closed", () => {
+  robotBridge?.disconnect();
   if (process.platform !== "darwin") app.quit();
 });

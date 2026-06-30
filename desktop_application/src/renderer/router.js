@@ -2,9 +2,13 @@ import { state } from "./state.js";
 import { registerPageCallbacks } from "./events.js";
 
 import { renderConnect } from "./pages/connect.js";
+import { renderDashboard } from "./pages/dashboard.js";
+import { renderControl } from "./pages/control.js";
 
 const PAGES = {
   connect: renderConnect,
+  dashboard: renderDashboard,
+  control: renderControl,
 };
 
 export async function showPage(name) {

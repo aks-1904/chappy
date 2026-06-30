@@ -507,3 +507,248 @@ select.form-control {
 .btn-icon {
   padding: 7px 10px;
 }
+
+/* Page Header */
+.page-header {
+  margin-bottom: 24px;
+}
+
+.page-title {
+  font-family: var(--font-hud);
+  font-size: 18px;
+  color: var(--cyan);
+  letter-spacing: 0.1em;
+}
+
+.page-sub {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+/* Stats Bar */
+.stat-bar {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.stat-item {
+  flex: 1;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+}
+
+.stat-num {
+  font-family: var(--font-hud);
+  font-size: 24px;
+  color: var(--cyan);
+}
+
+.stat-lbl {
+  font-size: 10px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+}
+
+/* Misc */
+.divider {
+  height: 1px;
+  background: var(--border);
+  margin: 16px 0;
+}
+
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.badge-cyan {
+  background: var(--cyan-glow);
+  color: var(--cyan);
+  border: 1px solid var(--border-cyan);
+}
+
+.badge-violet {
+  background: var(--violet-glow);
+  color: #a78bfa;
+  border: 1px solid rgba(124, 58, 237, 0.4);
+}
+
+.badge-green {
+  background: rgba(34, 197, 94, 0.1);
+  color: var(--green);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.badge-amber {
+  background: rgba(245, 158, 11, 0.1);
+  color: var(--amber);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.badge-red {
+  background: var(--ember-glow);
+  color: var(--ember);
+  border: 1px solid rgba(255, 68, 68, 0.3);
+}
+
+.flex-row {
+  display: flex;
+  gap: 8px;
+}
+
+.flex-end {
+  justify-content: flex-end;
+}
+
+.mt8 {
+  margin-top: 8px;
+}
+
+.mt16 {
+  margin-top: 16px;
+}
+
+.mb8 {
+  margin-bottom: 8px;
+}
+
+.text-dim {
+  color: var(--text-secondary);
+}
+
+.text-sm {
+  font-size: 12px;
+}
+
+.text-mono {
+  font-family: var(--font-mono);
+}
+
+.w100 {
+  width: 100%;
+}
+
+/* Scanline atmosphere (subtle) */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.03) 2px,
+    rgba(0, 0, 0, 0.03) 4px
+  );
+  z-index: 9998;
+}
+
+/* Sensor Bar */
+.sensor-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.sensor-tile {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  text-align: center;
+}
+
+.sensor-val {
+  font-family: var(--font-hud);
+  font-size: 28px;
+  color: var(--cyan);
+  line-height: 1;
+}
+
+.sensor-label {
+  font-size: 10px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.sensor-active .sensor-val {
+  color: var(--green);
+}
+
+.sensor-warn .sensor-val {
+  color: var(--amber);
+}
+
+/* Gesture Grid */
+.gesture-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+
+.gesture-btn {
+  padding: 14px 8px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-secondary);
+  font-size: 11px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.gesture-btn:hover {
+  border-color: var(--border-cyan);
+  color: var(--cyan);
+  background: var(--cyan-glow);
+  box-shadow: 0 0 10px var(--cyan-glow);
+}
+
+.gesture-btn:active {
+  transform: scale(0.95);
+}
+
+.gesture-btn .g-icon {
+  font-size: 22px;
+}
+
+/* Emotion */
+.emotion-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.emotion-pill {
+  padding: 7px 16px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.emotion-pill:hover,
+.emotion-pill.active {
+  border-color: var(--violet);
+  color: var(--violet);
+  background: var(--violet-glow);
+}
