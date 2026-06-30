@@ -32,7 +32,7 @@ document.querySelector(".sidebar").addEventListener("click", async (e) => {
 
 // Initial startup
 window.addEventListener("DOMContentLoaded", async () => {
-  // state.settings = await window.robot.getSettings();
+  state.settings = await window.robot.getSettings();
 
   await showPage("connect");
 });

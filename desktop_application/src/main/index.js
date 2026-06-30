@@ -4,6 +4,8 @@ import { nativeTheme, BrowserWindow, app } from "electron";
 import path from "path";
 import { fileURLToPath } from "url";
 import { registerIpcHandlers } from "./ipc.js";
+import { DatabaseManager } from "./database.js";
+import { RobotBridge } from "./robot-bridge.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -12,6 +14,10 @@ nativeTheme.themeSource = "dark";
 
 /** @type {BrowserWindow | null} */
 let mainWindow = null;
+/** @type {RobotBridge | null} */
+let robotBridge = null;
+/** @type {DatabaseManager | null} */
+let db = null;
 
 // Window
 function createWindow() {
@@ -42,10 +48,28 @@ function createWindow() {
   });
 }
 
-app.whenReady().then(() => {
-  createWindow();
+// Wire robot-bridge events -> renderer IPC channels
+function bridgeEvents(bridge) {
+  const forward = (bridgeEvent, ipcChannel) =>
+    bridge.on(bridgeEvent, (data) => send(ipcChannel, data));
 
-  registerIpcHandlers({ getWindow: () => mainWindow });
+  forward("sensor", "robot:sensor");
+  forward("event", "robot:event");
+  forward("frame", "robot:frame");
+  forward("log", "robot:log");
+  forward("connected", "robot:connected");
+  forward("disconnected", "robot:disconnected");
+  forward("emotion", "robot:emotion");
+}
+
+app.whenReady().then(() => {
+  db = new DatabaseManager();
+  robotBridge = new RobotBridge(db);
+
+  bridgeEvents(robotBridge);
+  registerIpcHandlers({ db, robotBridge, getWindow: () => mainWindow });
+
+  createWindow();
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

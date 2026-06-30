@@ -31,13 +31,15 @@
     }
   },
   "dependencies": {
+    "@electron/rebuild": "^4.0.6",
+    "better-sqlite3": "^12.11.1",
+    "node-fetch": "^3.3.2",
     "serialport": "^12.0.0",
-    "ws": "^8.16.0",
-    "better-sqlite3": "^9.4.3",
-    "node-fetch": "^3.3.2"
+    "ws": "^8.16.0"
   },
   "devDependencies": {
-    "electron": "^29.0.0",
-    "electron-builder": "^24.9.1"
+    "electron": "^42.5.0",
+    "electron-builder": "^26.15.3",
+    "electron-rebuild": "^1.4.0"
   }
 }
