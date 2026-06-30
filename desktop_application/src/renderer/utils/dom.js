@@ -12,3 +12,8 @@ export function setText(id, value) {
   const el = document.getElementById(id);
   if (el) el.textContent = value;
 }
+
+export function fmtDate(ts) {
+  if (!ts) return "—";
+  return new Date(ts * 1000).toLocaleString();
+}
