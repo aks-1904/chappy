@@ -13,7 +13,22 @@ export function setText(id, value) {
   if (el) el.textContent = value;
 }
 
+// Format a Unix timestamp (seconds) to locale date+time string
 export function fmtDate(ts) {
   if (!ts) return "—";
   return new Date(ts * 1000).toLocaleString();
+}
+
+// Format a Unix timestamp (seconds) to locale time string
+export function fmtTime(ts) {
+  if (!ts) return "—";
+  return new Date(ts * 1000).toLocaleTimeString();
+}
+
+// Escape HTML special characters
+export function escHtml(s) {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }

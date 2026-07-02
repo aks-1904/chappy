@@ -6,6 +6,9 @@ import { renderDashboard } from "./pages/dashboard.js";
 import { renderControl } from "./pages/control.js";
 import { renderCamera } from "./pages/camera.js";
 import { renderPersona } from "./pages/persona.js";
+import { renderMemory } from "./pages/memory.js";
+import { renderSettings } from "./pages/settings.js";
+import { renderLogs } from "./pages/logs.js";
 
 const PAGES = {
   connect: renderConnect,
@@ -13,6 +16,9 @@ const PAGES = {
   control: renderControl,
   camera: renderCamera,
   persona: renderPersona,
+  memory: renderMemory,
+  settings: renderSettings,
+  logs: renderLogs,
 };
 
 export async function showPage(name) {
